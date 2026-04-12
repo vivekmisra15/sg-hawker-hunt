@@ -352,11 +352,26 @@ The app deploys to a public URL, has a GitHub repo with README and demo GIF.
 
 ---
 
-## Kaggle / Gemma 4 parallel context
+## Session Notes — Milestone 1 (2026-04-12)
 
-This project is also the foundation for a Kaggle Gemma 4 Good Hackathon entry
-(deadline May 18, 2026). The AQI Advisor project ("Vayu") reuses this same
-multi-agent architecture with Gemma 4 E4B as the model backend instead of Claude.
-When the Hawker Hunt architecture is proven, port it for Vayu.
+### Implementation decisions
+- `respx==0.23.1` added to `requirements.txt` for HTTP mocking in tests
+- `sentence-transformers` removed — Anthropic SDK embeddings used for ChromaDB instead
+- All tool clients use `async with httpx.AsyncClient(timeout=N)` per method (not a shared instance)
+- Error class per client: `NEAClientError`, `PlacesClientError`, `OneMapClientError`
+- `WeatherClient` degrades gracefully — missing key returns default `WeatherResult`, never raises
+- `PlacesClient` raises `PlacesClientError` immediately if `GOOGLE_PLACES_API_KEY` not set
+- Module-level `_cache` dict in `nea_client.py` is a deliberate singleton across instances (1-hour TTL)
+- `backend/conftest.py` inserts `backend/` onto `sys.path` so `from tools.x import Y` works in tests
+- `backend/pytest.ini` sets `asyncio_mode = auto` and `asyncio_default_fixture_loop_scope = function`
 
-Do NOT mix Kaggle work into Hawker Hunt sessions.
+### Known spec discrepancies
+- Haversine test: original spec estimated ~7.4 km for `(1.3521, 103.8198)→(1.2978, 103.8516)`; actual haversine = 7.0 km. Test uses `pytest.approx(7.0, abs=0.1)`.
+
+### Test results — Milestone 1
+- 12 tests across 4 files, all passing
+- All HTTP calls mocked with `respx.mock` — no live API calls in tests
+- Tests that require API keys (Places, Weather) use `unittest.mock.patch.dict` to inject/remove env vars
+
+---
+
