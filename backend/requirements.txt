@@ -9,3 +9,4 @@ pytest==8.3.0
 pytest-asyncio==0.24.0
 respx==0.23.1
 sse-starlette==2.1.0
+pytz>=2024.1

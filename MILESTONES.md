@@ -9,15 +9,15 @@
 - [x] Pydantic schemas complete
 - [x] All clients have passing tests
 
-## Milestone 2 — Agents
-- [ ] Hygiene Agent
-- [ ] Location Agent
-- [ ] Recommendation Agent + ChromaDB RAG
-- [ ] Orchestrator Agent
-- [ ] All agents have passing tests
+## Milestone 2 — Agents ✓
+- [x] Hygiene Agent
+- [x] Location Agent
+- [x] Recommendation Agent + ChromaDB RAG
+- [x] Orchestrator Agent
+- [x] All agents have passing tests
 
 ## Milestone 3 — Streaming
-- [ ] POST /api/search SSE endpoint
+- [x] POST /api/search SSE endpoint
 - [ ] Frontend useSSE hook
 - [ ] AgentPanel component renders live stream
 - [ ] SearchBar submits and connects to SSE
