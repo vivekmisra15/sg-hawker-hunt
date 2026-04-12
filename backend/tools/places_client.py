@@ -36,7 +36,7 @@ class PlacesClient:
                     "radius": radius_km * 1000,
                 }
             },
-            "includedTypes": ["restaurant", "food"],
+            "includedTypes": ["restaurant", "meal_takeaway", "cafe"],
         }
         headers = {
             "X-Goog-Api-Key": key,

@@ -9,6 +9,10 @@ import os
 
 load_dotenv()
 
+from sse_starlette.sse import EventSourceResponse
+from agents.orchestrator import OrchestratorAgent
+from models.schemas import SearchRequest
+
 app = FastAPI(title="Hawker Hunt API", version="0.1.0")
 
 app.add_middleware(
@@ -18,6 +22,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+orchestrator = OrchestratorAgent()
 
 
 @app.get("/api/health")
@@ -29,5 +35,12 @@ async def health():
     }
 
 
-# TODO Milestone 1: import and mount agent router
-# TODO Milestone 3: mount SSE search endpoint
+@app.post("/api/search")
+async def search(request: SearchRequest):
+    async def event_generator():
+        async for event in orchestrator.run(request):
+            yield {
+                "event": event.type,
+                "data": event.model_dump_json(),
+            }
+    return EventSourceResponse(event_generator())

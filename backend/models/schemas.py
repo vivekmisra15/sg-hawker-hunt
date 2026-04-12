@@ -14,9 +14,11 @@ class SearchRequest(BaseModel):
 class HygieneResult(BaseModel):
     stall_name: str
     centre_name: str
-    grade: str  # A, B, C, D
+    grade: str  # A, B, C, D, or UNKNOWN
     demerit_points: int
     suspended: bool
+    is_closed_today: bool = False
+    reasoning_trace: str = ""
 
 
 class LocationResult(BaseModel):
@@ -26,9 +28,11 @@ class LocationResult(BaseModel):
     lng: float
     distance_km: float
     is_open: bool
-    google_rating: Optional[float]
-    review_count: Optional[int]
-    reviews_summary: Optional[str]
+    google_rating: Optional[float] = None
+    review_count: Optional[int] = None
+    reviews_summary: Optional[str] = None
+    crowd_level: str = "unknown"  # quiet | busy | unknown
+    reasoning_trace: str = ""
 
 
 class RankedRecommendation(BaseModel):
@@ -42,6 +46,7 @@ class RankedRecommendation(BaseModel):
     is_open: bool
     distance_km: float
     google_rating: Optional[float] = None
+    score: float = 0.0
 
 
 class CentreInfo(BaseModel):

@@ -272,15 +272,15 @@ SSE event format:
 - [ ] Frontend: Vite + React + Tailwind + shadcn setup
 - [ ] Verify: `pytest tests/` passes, `/health` returns 200
 
-### Milestone 2 — Agents (session 2)
-- [ ] Hygiene Agent: NEA data fetch + structured output
-- [ ] Location Agent: OneMap geocoding + Google Places integration
-- [ ] Recommendation Agent: ChromaDB RAG setup + Michelin/halal flags
-- [ ] Orchestrator: coordinates all three, returns structured result
-- [ ] Verify: each agent has passing unit tests
+### Milestone 2 — Agents (session 2) ✓
+- [x] Hygiene Agent: NEA data fetch + structured output
+- [x] Location Agent: OneMap geocoding + Google Places integration
+- [x] Recommendation Agent: ChromaDB RAG setup + Michelin/halal flags
+- [x] Orchestrator: coordinates all three, returns structured result
+- [x] Verify: each agent has passing unit tests
 
 ### Milestone 3 — Streaming + integration (session 3)
-- [ ] SSE endpoint: POST /api/search streams AgentEvents
+- [x] SSE endpoint: POST /api/search streams AgentEvents
 - [ ] Orchestrator streams reasoning trace tokens via SSE
 - [ ] Frontend AgentPanel: renders SSE stream live
 - [ ] Frontend SearchBar: submits query, triggers SSE connection
@@ -372,6 +372,51 @@ The app deploys to a public URL, has a GitHub repo with README and demo GIF.
 - 12 tests across 4 files, all passing
 - All HTTP calls mocked with `respx.mock` — no live API calls in tests
 - Tests that require API keys (Places, Weather) use `unittest.mock.patch.dict` to inject/remove env vars
+
+---
+
+## Session Notes — Milestone 2 (2026-04-12)
+
+### RAG + embeddings
+- `DefaultEmbeddingFunction` (ChromaDB built-in, all-MiniLM-L6-v2 via ONNX) used for embeddings — no external API needed at query time
+- `OpenAIEmbeddingFunction` is incompatible with Anthropic's embedding API (different request shape and auth)
+- ChromaDB collection: `hawker_knowledge`, cosine similarity, 384-dim
+- 20 stall seed documents covering 10 cuisines and 10 centres seeded via `python3 -m rag.seed`
+- `VectorStore.query()` guards with `min(n_results, collection_size)` to avoid ChromaDB error when collection is small
+
+### RecommendationAgent scoring weights
+- Grade A: +3, Grade B: +2, Grade C: +1, Grade D/UNKNOWN: 0
+- Michelin Bib Gourmand: +3
+- is_open (centre open now): +2
+- crowd_level == "quiet": +1
+- RAG semantic relevance: 0–2 (scaled from cosine distance, closer = higher)
+- Top 3 results returned; halal/vegetarian dietary filters applied before scoring
+
+### Agent patterns
+- Constructor injection on all agents: optional deps default to `None`, instantiated fresh if not provided — enables clean test mocking without patching module globals
+- OrchestratorAgent uses `asyncio.create_task` for HygieneAgent (set up for future parallelism with RAG)
+- LocationAgent raises `ValueError` (not a custom error) if coords are outside Singapore bounding box — orchestrator catches and yields an `error` AgentEvent
+- HygieneAgent returns `UNKNOWN` grade on `NEAClientError` — never crashes the pipeline
+- WeatherClient returns `_UNAVAILABLE` sentinel on missing key — never raises, no HTTP call made
+
+### Known API gotcha — Google Places New API
+- `"food"` is NOT a valid `includedType` in the Places API v1 — returns HTTP 400
+- Valid types used: `["restaurant", "meal_takeaway", "cafe"]`
+
+### pytz
+- `pytz>=2024.1` added to requirements for Singapore timezone (`Asia/Singapore`) in LocationAgent crowd heuristic
+- Busy hours defined as 11:00–14:59 and 17:00–20:59 SGT
+
+### SSE endpoint
+- `POST /api/search` wired in `main.py` — returns `EventSourceResponse` wrapping the orchestrator's async generator
+- SSE event format: `{"event": "<type>", "data": "<model_dump_json>"}`
+- Live test confirmed correct event order: orchestrator (parse) → orchestrator (location) → location → hygiene → recommendation → result
+
+### Test results — Milestone 2
+- 30 tests across 8 files, all passing (18 new tests added this milestone)
+- Agent tests use constructor injection + `AsyncMock` — no live API calls or ChromaDB writes
+- `_load_json_list` patched in recommendation agent tests to avoid filesystem dependency
+- Crowd heuristic tested by patching `agents.location_agent.datetime` with a stub class
 
 ---
 
