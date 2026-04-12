@@ -1,13 +1,13 @@
 # Hawker Hunt — Build Progress
 
-## Milestone 1 — Foundation
-- [ ] FastAPI health endpoint
-- [ ] NEA client (hygiene grades + closures)
-- [ ] Google Places client
-- [ ] OneMap client
-- [ ] OpenWeather client
-- [ ] Pydantic schemas complete
-- [ ] All clients have passing tests
+## Milestone 1 — Foundation ✓
+- [x] FastAPI health endpoint
+- [x] NEA client (hygiene grades + closures)
+- [x] Google Places client
+- [x] OneMap client
+- [x] OpenWeather client
+- [x] Pydantic schemas complete
+- [x] All clients have passing tests
 
 ## Milestone 2 — Agents
 - [ ] Hygiene Agent

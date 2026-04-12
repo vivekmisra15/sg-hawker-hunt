@@ -1,6 +1,5 @@
 """
 Pydantic models for all agent inputs and outputs.
-Implement fully in Milestone 1.
 """
 from pydantic import BaseModel
 from typing import Optional
@@ -42,4 +41,33 @@ class RankedRecommendation(BaseModel):
     is_halal: bool
     is_open: bool
     distance_km: float
-    google_rating: Optional[float]
+    google_rating: Optional[float] = None
+
+
+class CentreInfo(BaseModel):
+    centre_id: str
+    name: str
+    address: str
+    lat: float
+    lng: float
+
+
+class WeatherResult(BaseModel):
+    description: str
+    temp_c: float
+    is_raining: bool
+    outdoor_recommendation: str
+
+
+class AgentEvent(BaseModel):
+    type: str
+    agent: Optional[str] = None
+    message: str
+    data: dict = {}
+
+
+class SearchResponse(BaseModel):
+    query: str
+    recommendations: list[RankedRecommendation]
+    centres_checked: int
+    agent_events: list[AgentEvent] = []
