@@ -2,7 +2,6 @@
 One-time seed script for the ChromaDB hawker knowledge base.
 Run from backend/: python3 -m rag.seed
 """
-import json
 import os
 import sys
 
@@ -433,34 +432,323 @@ STALLS = [
             "price_range": "S$3-5",
         },
     },
+    # ── Bak Kut Teh ──────────────────────────────────────────────────────────
+    {
+        "id": "song_fa_bak_kut_teh_clementi",
+        "text": (
+            "Song Fa Bak Kut Teh at Clementi 448 Market & Food Centre, West Singapore. "
+            "Peppery Teochew-style pork rib soup with tender ribs in a clear, intensely peppery broth. "
+            "One of Singapore's most popular bak kut teh chains — the west outlet is less crowded than CBD. "
+            "Pairs well with you tiao (fried dough) dipped into the broth. "
+            "Open for breakfast and lunch. Price S$8-14."
+        ),
+        "metadata": {
+            "centre_name": "Clementi 448 Market & Food Centre",
+            "stall_name": "Song Fa Bak Kut Teh",
+            "cuisine": "bak kut teh",
+            "tags": "bak kut teh, pork rib soup, teochew, peppery, west singapore, clementi",
+            "is_michelin": False,
+            "is_halal": False,
+            "best_time": "7am-2pm",
+            "avoid_time": "After 3pm — may close",
+            "price_range": "S$8-14",
+        },
+    },
+    {
+        "id": "ng_ah_sio_bak_kut_teh_rangoon",
+        "text": (
+            "Ng Ah Sio Bak Kut Teh at Rangoon Road, Farrer Park. "
+            "Strong peppery pork rib soup — signature dark, deeply spiced broth. "
+            "A Central Singapore institution open since 1977. The broth is richer and darker than most. "
+            "Popular with early morning crowds and supper diners. "
+            "Price S$9-15."
+        ),
+        "metadata": {
+            "centre_name": "Rangoon Road",
+            "stall_name": "Ng Ah Sio Bak Kut Teh",
+            "cuisine": "bak kut teh",
+            "tags": "bak kut teh, pork rib soup, peppery, central singapore, farrer park, rangoon",
+            "is_michelin": False,
+            "is_halal": False,
+            "best_time": "7am-10am or 9pm-midnight",
+            "avoid_time": "Midday peak",
+            "price_range": "S$9-15",
+        },
+    },
+    {
+        "id": "founder_bak_kut_teh_rangoon",
+        "text": (
+            "Founder Bak Kut Teh at Rangoon Road. "
+            "Traditional peppery bak kut teh with spare ribs, belly pork, and offal options. "
+            "Family-run since 1978 — the pepper level is adjustable and very customisable. "
+            "Often cited as one of the best in Singapore. "
+            "Price S$9-14."
+        ),
+        "metadata": {
+            "centre_name": "Rangoon Road",
+            "stall_name": "Founder Bak Kut Teh",
+            "cuisine": "bak kut teh",
+            "tags": "bak kut teh, pork ribs, peppery, traditional, rangoon road",
+            "is_michelin": False,
+            "is_halal": False,
+            "best_time": "7:30am-9:30pm",
+            "avoid_time": "No particular bad time",
+            "price_range": "S$9-14",
+        },
+    },
+    # ── West-side stalls ─────────────────────────────────────────────────────
+    {
+        "id": "lim_kee_duck_rice_clementi",
+        "text": (
+            "Lim Kee Duck Rice at Clementi 448 Market & Food Centre. "
+            "Braised duck rice with tender braised duck, tau kwa, and hard-boiled egg in dark soy broth. "
+            "A neighbourhood favourite in West Singapore — queue expected at lunch. "
+            "Also serves duck noodles and duck porridge. "
+            "Price S$4-7."
+        ),
+        "metadata": {
+            "centre_name": "Clementi 448 Market & Food Centre",
+            "stall_name": "Lim Kee Duck Rice",
+            "cuisine": "duck rice",
+            "tags": "duck rice, braised duck, clementi, west singapore",
+            "is_michelin": False,
+            "is_halal": False,
+            "best_time": "11am-2pm",
+            "avoid_time": "After 3pm — may sell out",
+            "price_range": "S$4-7",
+        },
+    },
+    {
+        "id": "abc_brickworks_char_siu_rice",
+        "text": (
+            "Char Siu Rice stall at ABC Brickworks Food Centre, Queenstown. "
+            "Cantonese roast meats — char siu (BBQ pork), roast duck, and sio bak (crispy pork belly). "
+            "Served over steamed rice or noodles with a light soy drizzle. "
+            "ABC Brickworks is one of the best food centres in the west. "
+            "Price S$4-8."
+        ),
+        "metadata": {
+            "centre_name": "ABC Brickworks Food Centre",
+            "stall_name": "ABC Brickworks Char Siu Rice",
+            "cuisine": "char siu rice",
+            "tags": "char siu, roast meat, BBQ pork, sio bak, queenstown, west singapore",
+            "is_michelin": False,
+            "is_halal": False,
+            "best_time": "10:30am-2pm",
+            "avoid_time": "After 3pm — may sell out",
+            "price_range": "S$4-8",
+        },
+    },
+    {
+        "id": "abc_brickworks_hokkien_mee",
+        "text": (
+            "Tiong Bahru Yi Sheng Fried Hokkien Prawn Mee at ABC Brickworks Food Centre, Queenstown. "
+            "Wok-fried yellow noodles and bee hoon in prawn and lard broth with squid and sambal. "
+            "Strong wok hei, generous prawn flavour. One of the best Hokkien mee stalls in west Singapore. "
+            "Queue expected at dinner. "
+            "Price S$5-10."
+        ),
+        "metadata": {
+            "centre_name": "ABC Brickworks Food Centre",
+            "stall_name": "Tiong Bahru Yi Sheng Fried Hokkien Prawn Mee",
+            "cuisine": "hokkien mee",
+            "tags": "hokkien mee, wok hei, prawn, west singapore, queenstown, abc brickworks",
+            "is_michelin": False,
+            "is_halal": False,
+            "best_time": "5pm-9pm",
+            "avoid_time": "Daytime — stall opens evenings only",
+            "price_range": "S$5-10",
+        },
+    },
+    {
+        "id": "abc_brickworks_mee_rebus",
+        "text": (
+            "Selera Minang Mee Rebus at ABC Brickworks Food Centre. "
+            "Malay-style yellow noodles in a thick, sweet-savoury potato and prawn gravy, "
+            "topped with bean sprouts, a boiled egg, fried shallots, and green chilli. "
+            "Halal certified. A classic Malay hawker dish. "
+            "Price S$3.50-5."
+        ),
+        "metadata": {
+            "centre_name": "ABC Brickworks Food Centre",
+            "stall_name": "Selera Minang",
+            "cuisine": "mee rebus",
+            "tags": "mee rebus, malay food, halal, yellow noodles, west singapore",
+            "is_michelin": False,
+            "is_halal": True,
+            "best_time": "7am-2pm",
+            "avoid_time": "After 3pm — may close",
+            "price_range": "S$3.50-5",
+        },
+    },
+    {
+        "id": "buona_vista_economy_rice",
+        "text": (
+            "Economy Rice at Buona Vista Market & Food Centre. "
+            "Cai fan — choose from 20+ dishes over steamed white rice: braised pork, "
+            "stir-fried vegetables, tofu, fried egg, and more. "
+            "Budget-friendly and filling. Vegetarian options always available. "
+            "Open from 7am. Price S$3-5."
+        ),
+        "metadata": {
+            "centre_name": "Buona Vista Market & Food Centre",
+            "stall_name": "Buona Vista Economy Rice",
+            "cuisine": "economy rice",
+            "tags": "economy rice, cai fan, vegetarian, budget, west singapore",
+            "is_michelin": False,
+            "is_halal": False,
+            "best_time": "7am-2pm",
+            "avoid_time": "After 3pm — dishes run out",
+            "price_range": "S$3-5",
+        },
+    },
+    # ── More diverse central stalls ──────────────────────────────────────────
+    {
+        "id": "lian_he_ben_ji_claypot_rice",
+        "text": (
+            "Lian He Ben Ji Claypot Rice at Chinatown Complex Market & Food Centre, stall #02-198/200. "
+            "Claypot rice cooked over charcoal with Chinese sausage, waxed duck, and salted fish. "
+            "Michelin Bib Gourmand 2025. The scorched rice crust at the bottom is the prized part. "
+            "Wait time 30-45 minutes as each pot is made to order. "
+            "Price S$8-15."
+        ),
+        "metadata": {
+            "centre_name": "Chinatown Complex Market & Food Centre",
+            "stall_name": "Lian He Ben Ji Claypot Rice",
+            "cuisine": "claypot rice",
+            "tags": "claypot rice, charcoal, waxed meat, chinese sausage, chinatown",
+            "is_michelin": True,
+            "is_halal": False,
+            "best_time": "5pm-10pm (dinner)",
+            "avoid_time": "Lunch — opens for dinner only",
+            "price_range": "S$8-15",
+        },
+    },
+    {
+        "id": "outram_park_fried_kway_teow",
+        "text": (
+            "Outram Park Fried Kway Teow Mee at Hong Lim Market & Food Centre stall #02-18. "
+            "Classic Teochew char kway teow — flat rice noodles fried with cockles, egg, beansprouts, "
+            "and Chinese sausage. Strong wok hei, slightly sweet-savoury. "
+            "Michelin Bib Gourmand 2025. Queue is usually 20-30 minutes. "
+            "Price S$3-5."
+        ),
+        "metadata": {
+            "centre_name": "Hong Lim Market & Food Centre",
+            "stall_name": "Outram Park Fried Kway Teow",
+            "cuisine": "char kway teow",
+            "tags": "char kway teow, wok hei, cockles, outram, hong lim",
+            "is_michelin": True,
+            "is_halal": False,
+            "best_time": "11am-2pm",
+            "avoid_time": "Weekend peak — very long queues",
+            "price_range": "S$3-5",
+        },
+    },
+    {
+        "id": "whampoa_prawn_noodles",
+        "text": (
+            "545 Whampoa Prawn Noodles at Whampoa Makan Place / Food Centre. "
+            "Prawn noodle soup or dry — rich intense prawn bisque broth, fresh prawns, "
+            "pork ribs, and pork slices. One of the most celebrated prawn noodle stalls in Singapore. "
+            "Queue 30+ minutes on weekends. "
+            "Price S$6-12."
+        ),
+        "metadata": {
+            "centre_name": "Whampoa Makan Place",
+            "stall_name": "545 Whampoa Prawn Noodles",
+            "cuisine": "prawn noodles",
+            "tags": "prawn noodles, hae mee, pork ribs, whampoa, intense broth",
+            "is_michelin": False,
+            "is_halal": False,
+            "best_time": "8am-1pm",
+            "avoid_time": "Weekends — extremely long queue",
+            "price_range": "S$6-12",
+        },
+    },
+    {
+        "id": "amoy_street_ban_mian",
+        "text": (
+            "Xing Ji Rou Cuo Mian (Ban Mian) at Amoy Street Food Centre. "
+            "Handmade flat noodles in a clear anchovy broth with minced pork, "
+            "poached egg, and fried anchovies on top. "
+            "Ban mian is a classic comfort dish — light, savoury, filling. "
+            "Opens for weekday breakfast and lunch. Price S$4-6."
+        ),
+        "metadata": {
+            "centre_name": "Amoy Street Food Centre",
+            "stall_name": "Xing Ji Rou Cuo Mian",
+            "cuisine": "ban mian",
+            "tags": "ban mian, handmade noodles, anchovy broth, comfort food, amoy street",
+            "is_michelin": False,
+            "is_halal": False,
+            "best_time": "7:30am-2pm",
+            "avoid_time": "After 3pm — closed",
+            "price_range": "S$4-6",
+        },
+    },
+    {
+        "id": "clementi_oyster_omelette",
+        "text": (
+            "Oyster Omelette (Orh Luak) at Clementi 448 Market & Food Centre. "
+            "Crispy fried egg omelette with plump fresh oysters and a starchy, chewy centre. "
+            "Served with tangy chilli sauce. A Hokkien favourite — the crispy-chewy texture contrast is key. "
+            "Open for lunch and dinner. Price S$5-7."
+        ),
+        "metadata": {
+            "centre_name": "Clementi 448 Market & Food Centre",
+            "stall_name": "Clementi 448 Oyster Omelette",
+            "cuisine": "oyster omelette",
+            "tags": "oyster omelette, orh luak, hokkien, seafood, clementi, west singapore",
+            "is_michelin": False,
+            "is_halal": False,
+            "best_time": "11am-8pm",
+            "avoid_time": "No bad time",
+            "price_range": "S$5-7",
+        },
+    },
+    {
+        "id": "toa_payoh_curry_puff",
+        "text": (
+            "Rolina Traditional Hainanese Curry Puff at Toa Payoh Central. "
+            "Flaky spiral pastry filled with curried potato and chicken or black pepper chicken. "
+            "The original Hainanese curry puff style — thick flaky crust, dry curry filling. "
+            "Sells out fast — best to arrive before 11am. Price S$1.50-2."
+        ),
+        "metadata": {
+            "centre_name": "Toa Payoh Central",
+            "stall_name": "Rolina Traditional Hainanese Curry Puff",
+            "cuisine": "curry puff",
+            "tags": "curry puff, hainanese, pastry, toa payoh, snack",
+            "is_michelin": False,
+            "is_halal": False,
+            "best_time": "8am-11am",
+            "avoid_time": "After 11am — sells out",
+            "price_range": "S$1.50-2",
+        },
+    },
+    {
+        "id": "bedok_85_frog_porridge",
+        "text": (
+            "Frog Porridge at Bedok 85 Market & Food Centre (85 Fengshan Food Centre). "
+            "Smooth rice porridge with tender frog legs cooked in ginger and spring onion. "
+            "A supper institution — Bedok 85 is Singapore's most famous late-night hawker centre. "
+            "Open until 3am. Also serves congee, zi char dishes, and satay. "
+            "Price S$8-15 per frog."
+        ),
+        "metadata": {
+            "centre_name": "Bedok 85 Market & Food Centre",
+            "stall_name": "Bedok 85 Frog Porridge",
+            "cuisine": "frog porridge",
+            "tags": "frog porridge, congee, supper, late night, bedok, east singapore",
+            "is_michelin": False,
+            "is_halal": False,
+            "best_time": "8pm-2am (supper)",
+            "avoid_time": "Daytime — not open",
+            "price_range": "S$8-15",
+        },
+    },
 ]
-
-MICHELIN_2025 = [
-    "Tian Tian Hainanese Chicken Rice",
-    "328 Katong Laksa",
-    "Hill Street Fried Kway Teow",
-    "Sungei Road Laksa",
-    "Tai Hwa Pork Noodle",
-    "Zhong Guo La Mian Xiao Long Bao",
-    "Fishball Story",
-    "Hawker Chan Soya Sauce Chicken",
-    "A Noodle Story",
-    "Liao Fan Hong Kong Soya Sauce Chicken Rice & Noodle",
-]
-
-HALAL_STALLS = [
-    "Alliance Seafood",
-    "Mizzy Corner Nasi Lemak",
-    "Mr Prata Adam Road",
-    "Satay Street Lau Pa Sat",
-    "Hajjah Mona Nasi Padang",
-    "Zam Zam Restaurant",
-    "Adam Road Prata House",
-    "Bismillah Biryani",
-    "Al-Azhar Restaurant",
-    "Geylang Serai BBQ",
-]
-
 
 def seed():
     vs = VectorStore()
@@ -471,19 +759,8 @@ def seed():
     vs.add_documents(STALLS)
     size = vs.collection_size()
     print(f"Seeded {size} documents into ChromaDB collection 'hawker_knowledge'.")
-
-    # Write static JSON files
-    data_dir = os.path.join(os.path.dirname(__file__), "..", "data")
-    michelin_path = os.path.join(data_dir, "michelin_2025.json")
-    halal_path = os.path.join(data_dir, "halal_stalls.json")
-
-    with open(michelin_path, "w") as f:
-        json.dump(MICHELIN_2025, f, indent=2)
-    print(f"Wrote {len(MICHELIN_2025)} entries to michelin_2025.json")
-
-    with open(halal_path, "w") as f:
-        json.dump(HALAL_STALLS, f, indent=2)
-    print(f"Wrote {len(HALAL_STALLS)} entries to halal_stalls.json")
+    # Note: michelin_2025.json and halal_stalls.json are managed as structured JSON
+    # in backend/data/ and are NOT written by this script.
 
     # Smoke-test a query
     results = vs.query("chicken rice near Maxwell", n_results=2)

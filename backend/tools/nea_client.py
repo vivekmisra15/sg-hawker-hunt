@@ -14,7 +14,9 @@ class NEAClientError(Exception):
 
 
 _cache: dict = {}  # module-level singleton: {resource_id: (records, timestamp)}
+_error_cache: dict = {}  # {resource_id: expiry_timestamp} — suppresses 429 log spam
 CACHE_TTL_SECONDS = 3600
+ERROR_CACHE_TTL = 300  # 5 minutes
 
 
 class NEAClient:
@@ -38,12 +40,18 @@ class NEAClient:
         cached = self._get_cached(resource_id)
         if cached is not None:
             return cached
+        # Skip request if a recent 429 was cached for this resource
+        if resource_id in _error_cache and time.time() < _error_cache[resource_id]:
+            raise NEAClientError(f"NEA API rate limited (retry after {int(_error_cache[resource_id] - time.time())}s)")
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(
                 self.BASE_URL,
                 params={"resource_id": resource_id, "limit": 10000},
                 headers=self._headers(),
             )
+        if resp.status_code == 429:
+            _error_cache[resource_id] = time.time() + ERROR_CACHE_TTL
+            raise NEAClientError(f"NEA API error: HTTP 429 (rate limited — set DATAGOV_API_KEY in .env)")
         if resp.status_code != 200:
             raise NEAClientError(f"NEA API error: HTTP {resp.status_code}")
         body = resp.json()
