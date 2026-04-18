@@ -6,13 +6,12 @@ export default {
     extend: {
       colors: {
         accent: '#f59e0b',
+        surface: '#111111',
+        card: '#1a1a1a',
       },
       fontFamily: {
         sans: ['DM Sans', 'system-ui', 'sans-serif'],
-        mono: ['GeistMono', 'ui-monospace', 'monospace'],
-      },
-      backgroundColor: {
-        base: '#0a0a0a',
+        mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
       },
     },
   },
