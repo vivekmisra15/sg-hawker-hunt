@@ -1,12 +1,17 @@
 [
-  "Alliance Seafood",
-  "Mizzy Corner Nasi Lemak",
-  "Mr Prata Adam Road",
-  "Satay Street Lau Pa Sat",
-  "Hajjah Mona Nasi Padang",
-  "Zam Zam Restaurant",
-  "Adam Road Prata House",
-  "Bismillah Biryani",
-  "Al-Azhar Restaurant",
-  "Geylang Serai BBQ"
+  { "stall_name": "Selera Rasa Nasi Lemak", "centre_name": "Adam Road Food Centre", "cuisine": "Nasi Lemak", "muis_certified": true },
+  { "stall_name": "Bahrakath Mutton Soup", "centre_name": "Tekka Centre", "cuisine": "Mutton Soup", "muis_certified": true },
+  { "stall_name": "Aminah's Prata", "centre_name": "Toa Payoh Lorong 8 Market & Food Centre", "cuisine": "Roti Prata", "muis_certified": true },
+  { "stall_name": "Super Shiok Nasi Lemak", "centre_name": "Bukit Timah Market & Food Centre", "cuisine": "Nasi Lemak", "muis_certified": true },
+  { "stall_name": "Taibah Arabic", "centre_name": "Golden Mile Complex", "cuisine": "Arabic", "muis_certified": true },
+  { "stall_name": "Hjh Maimunah", "centre_name": "Jalan Pisang", "cuisine": "Nasi Padang", "muis_certified": true },
+  { "stall_name": "Zam Zam", "centre_name": "North Bridge Road", "cuisine": "Murtabak", "muis_certified": true },
+  { "stall_name": "The Roti Prata House", "centre_name": "Upper Thomson Road", "cuisine": "Roti Prata", "muis_certified": true },
+  { "stall_name": "Bismillah Biryani", "centre_name": "Tekka Centre", "cuisine": "Biryani", "muis_certified": true },
+  { "stall_name": "Adam Road Prata House", "centre_name": "Adam Road Food Centre", "cuisine": "Roti Prata", "muis_certified": true },
+  { "stall_name": "Al-Azhar Restaurant", "centre_name": "Clementi", "cuisine": "Nasi Padang", "muis_certified": true },
+  { "stall_name": "Mizzy Corner Nasi Lemak", "centre_name": "Toa Payoh West Market & Food Centre", "cuisine": "Nasi Lemak", "muis_certified": true },
+  { "stall_name": "Springleaf Prata Place", "centre_name": "Upper Thomson Road", "cuisine": "Roti Prata", "muis_certified": true },
+  { "stall_name": "Sabar Menanti", "centre_name": "Race Course Road", "cuisine": "Nasi Padang", "muis_certified": true },
+  { "stall_name": "Bismillah Nasi Padang", "centre_name": "Geylang Serai Market & Food Centre", "cuisine": "Nasi Padang", "muis_certified": true }
 ]
