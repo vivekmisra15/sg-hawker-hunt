@@ -6,23 +6,31 @@ export interface SearchRequest {
   lng?: number;
 }
 
+export type AgentName = 'orchestrator' | 'hygiene' | 'location' | 'recommendation';
+
+export type EventType = 'agent_update' | 'result' | 'error';
+
+export interface AgentEvent {
+  type: EventType;
+  agent?: AgentName;
+  message?: string;
+  data?: Record<string, unknown>;
+}
+
 export interface RankedRecommendation {
   stall_name: string;
   centre_name: string;
   rank: number;
   reasoning: string;
-  hygiene_grade: "A" | "B" | "C" | "D";
+  hygiene_grade: 'A' | 'B' | 'C' | 'D' | 'UNKNOWN';
   is_michelin: boolean;
   is_halal: boolean;
   is_open: boolean;
   distance_km: number;
   google_rating?: number;
+  score?: number;
 }
 
-export interface AgentEvent {
-  type: "agent_update" | "result" | "error";
-  agent?: "orchestrator" | "hygiene" | "location" | "recommendation";
-  message?: string;
-  data?: unknown;
-  recommendations?: RankedRecommendation[];
+export interface SearchResult {
+  recommendations: RankedRecommendation[];
 }
