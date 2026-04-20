@@ -420,3 +420,107 @@ The app deploys to a public URL, has a GitHub repo with README and demo GIF.
 
 ---
 
+## Session Notes — Milestone 3 (2026-04-18)
+
+### Backend hardening
+- `import json` added to `main.py` (was missing — needed for error event serialisation)
+- CORS `allow_origins` now explicitly lists `http://localhost:5173` and `http://127.0.0.1:5173` in addition to the env var — Vite dev server connects reliably regardless of how it resolves localhost
+- SSE endpoint wrapped in `try/except` — stream errors yield an `error` event to the client instead of silently disconnecting
+- `EventSourceResponse` now passed `headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}` — prevents proxy buffering of the live stream
+
+### Frontend stack
+- React 18 + Vite, Tailwind CSS, Framer Motion, TypeScript — all from existing scaffold
+- Fonts: DM Sans (UI) + JetBrains Mono (agent panel terminal text) loaded from Google Fonts
+- Tailwind tokens added: `surface` (#111111), `card` (#1a1a1a), `accent` (#f59e0b already existed)
+- Global CSS: `--accent` CSS variable, `box-sizing: border-box`, amber `::selection`, `cursor-blink` keyframe
+
+### SSE client pattern — no EventSource library needed
+- `createSearchStream` in `lib/api.ts` uses `fetch` + `ReadableStream` + `AbortController`
+- Parses SSE by splitting buffer on `\n` and extracting `data: ` lines — handles chunked delivery correctly
+- Returns a cancel function; `useSSE` hook stores it in a `useRef` to cancel on re-search or unmount
+- `EventSource` browser API was NOT used — it doesn't support POST requests
+
+### useSSE hook — state machine
+- States: `idle → searching → complete | error`
+- `onComplete` uses functional updater `setState(s => s === 'searching' ? 'complete' : s)` to avoid stale closure — deviates from original spec which had a closure bug
+- Reset (clicking the wordmark) aborts any in-flight stream and clears all state
+
+### AgentPanel — terminal aesthetic
+- JetBrains Mono, green-tinted text (`text-green-300/70`) on `#111111` background
+- Traffic-light dots in header reinforce the terminal metaphor
+- Framer Motion `AnimatePresence` + `motion.div` animate each new trace line from `y:10, opacity:0`
+- Blinking cursor `▊` uses CSS `step-end` animation — appears only while `state === 'searching'`
+- `useEffect` on traces array scrolls container to bottom on each new line
+
+### SearchBar chips — emoji stripping
+- Example chips fill the input with the text portion only, stripping the leading emoji
+- Uses Unicode property escape `\p{Emoji}` which requires the `u` flag — works in all modern browsers
+
+### Known issue — DATAGOV_API_KEY required for hygiene grades
+- NEA data.gov.sg enforces a very low rate limit for unauthenticated requests → HTTP 429
+- Without the key, all hygiene grades show as UNKNOWN (HygieneAgent returns UNKNOWN on NEAClientError)
+- Module-level `_error_cache` added to `nea_client.py`: first 429 is logged with a clear message, then suppressed for 5 minutes to eliminate log spam
+- **Fix**: register for a free API key at data.gov.sg and add `DATAGOV_API_KEY=` to `.env`
+
+### Seed data expanded (post-testing fix)
+- Initial 20-stall seed had no bak kut teh entries — wrong cuisine returned for those queries
+- Expanded to 35 stalls: added bak kut teh (Song Fa Clementi, Ng Ah Sio, Founder), west-side centres (Clementi 448, ABC Brickworks, Buona Vista), claypot rice, ban mian, oyster omelette, frog porridge
+- `seed.py` no longer writes `michelin_2025.json` or `halal_stalls.json` — those files are now managed as structured JSON objects separately and must not be overwritten by the seed script
+- Re-seed command: `source venv/bin/activate && cd backend && python3 -m rag.seed`
+
+### Test results — Milestone 3
+- 30 tests, all passing (no new tests — Milestone 3 was a frontend implementation milestone)
+- Frontend build: `npm run build` produces zero TypeScript errors, 268 KB JS bundle
+- Live SSE smoke test: "chicken rice near Maxwell" → 5 agent_update events + 1 result event, correct stall ranking
+
+---
+
+## Session Notes — Data Fix (2026-04-20)
+
+### NEA API — auth method corrected
+- `_error_cache` and `_headers()` removed from `nea_client.py`
+- Auth is now `X-Api-Key: <key>` header (not `Authorization` header, not `api_key` query param)
+- data.gov.sg v2 API keys (`v2:...` format) require the `X-Api-Key` header specifically
+- `CENTRES_RESOURCE` (`b80cb643-...`) confirmed working with `X-Api-Key`
+- Timeout raised from 10s to 30s (new hygiene dataset is 2.5 MB but responds in ~0.3s)
+
+### NEA hygiene grades — dataset migrated, individual stall grades unavailable
+- Old resource ID `4a291f25-2d8d-4b3a-9aaf-e8b1bd0ceedb` returns 404 — dataset removed
+- Responsibility transferred from NEA to SFA (Singapore Food Agency); individual stall grades now only accessible via the SFA Track Records web UI (not a public API)
+- `HYGIENE_RESOURCE` updated to `d_227473e811b09731e64725f140b77697` ("List of NEA Licensed Eating Establishments") — this dataset contains 36,687 corporate eating establishment records (restaurants, hotels) but NOT individual hawker stall entries
+- Hawker stall grades therefore show as UNKNOWN — this is the correct honest result given available public data
+- Field names in new dataset: `licensee_name`, `premises_address`, `grade`, `demerit_points`, `suspension_start_date` (was `LICENSEE_NAME`, `BUSINESS_NAME`, `GRADE`, etc.)
+- `get_hygiene_grades()` updated to use new lowercase field names
+
+### RAG seed expanded to 71 stalls
+- `seed.py` fully rewritten: 71 stalls (up from 35), rich 50-70 word descriptions
+- `tags` changed from plain string to `list[str]` in seed source
+- New `region` field added: `"central"`, `"east"`, `"west"`, `"north"`, `"north_east"`
+- `add_documents()` in `vector_store.py` updated to join list metadata values with `", "` (ChromaDB requires primitive types)
+- Geographic coverage: 15 central, 16 east, 11 west, 8 north, 7 north_east stalls
+- Cuisine coverage added: popiah, yong tau foo, thunder tea rice, tau huay, kaya toast, chee cheong fun, murtabak, mee siam, biryani, oyster omelette, hor fun, char siu rice, fish head curry
+- chroma_db/ deleted and re-seeded; collection confirmed at 71 documents
+- Re-seed command: `rm -rf backend/chroma_db/ && source venv/bin/activate && cd backend && python3 -m rag.seed`
+
+### RAG diagnostic results (post-expansion)
+| Query | Top result | Correct? |
+|---|---|---|
+| "bak kut teh in the west" | Song Fa Bak Kut Teh (west) | ✓ |
+| "char kway teow" | No. 18 Zion Road Fried Kway Teow (char kway teow) | ✓ |
+| "halal nasi lemak" | Selera Rasa Nasi Lemak | ✓ |
+| "laksa not crowded" | Sungei Road Laksa | ✓ |
+| "vegetarian food near Toa Payoh" | Toa Payoh Lor 8 Porridge (geographic pull wins) | Partial |
+
+Vegetarian query limitation: "near Toa Payoh" pulls results toward central stalls; vegetarian-tagged stalls (thunder tea rice, yong tau foo) are in NE/west. The Recommendation Agent dietary filter handles this at scoring time.
+
+### Live SSE end-to-end test results (post data-fix)
+- All 3 queries return 5 agent_update events + 1 result event ✓
+- No stream errors or timeouts ✓
+- Cuisine matching correct for all 3 queries ✓
+- Hygiene grades UNKNOWN (expected — SFA data not publicly available via API)
+
+### Test results — Data Fix
+- 30/30 tests passing (no new tests this session — changes were data and auth fixes)
+
+---
+
