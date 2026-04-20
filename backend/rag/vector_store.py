@@ -34,7 +34,7 @@ class VectorStore:
         """
         Add documents to the collection.
         Each doc: {id: str, text: str, metadata: dict}
-        metadata keys: centre_name, stall_name, cuisine, tags (str),
+        metadata keys: centre_name, stall_name, cuisine, region, tags (list[str]→joined str),
                        is_michelin (bool→str), is_halal (bool→str),
                        best_time, avoid_time, price_range
         ChromaDB metadata values must be str/int/float/bool — no nested dicts.
@@ -44,7 +44,7 @@ class VectorStore:
         # ChromaDB requires metadata values to be primitive types
         sanitised_meta = []
         for d in docs:
-            m = {k: (str(v) if isinstance(v, bool) else v)
+            m = {k: (", ".join(v) if isinstance(v, list) else str(v) if isinstance(v, bool) else v)
                  for k, v in d.get("metadata", {}).items()}
             sanitised_meta.append(m)
 
