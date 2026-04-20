@@ -14,20 +14,14 @@ class NEAClientError(Exception):
 
 
 _cache: dict = {}  # module-level singleton: {resource_id: (records, timestamp)}
-_error_cache: dict = {}  # {resource_id: expiry_timestamp} — suppresses 429 log spam
 CACHE_TTL_SECONDS = 3600
-ERROR_CACHE_TTL = 300  # 5 minutes
 
 
 class NEAClient:
     BASE_URL = "https://data.gov.sg/api/action/datastore_search"
     CENTRES_RESOURCE = "b80cb643-a732-480d-86b5-e03957bc82aa"
-    HYGIENE_RESOURCE = "4a291f25-2d8d-4b3a-9aaf-e8b1bd0ceedb"
+    HYGIENE_RESOURCE = "d_227473e811b09731e64725f140b77697"
     CLOSURE_RESOURCE = "d_bda4baa634dd1cc7a6c7cad5f19e2d68"
-
-    def _headers(self) -> dict:
-        key = os.getenv("DATAGOV_API_KEY")
-        return {"Authorization": key} if key else {}
 
     def _get_cached(self, key: str):
         if key in _cache:
@@ -40,18 +34,15 @@ class NEAClient:
         cached = self._get_cached(resource_id)
         if cached is not None:
             return cached
-        # Skip request if a recent 429 was cached for this resource
-        if resource_id in _error_cache and time.time() < _error_cache[resource_id]:
-            raise NEAClientError(f"NEA API rate limited (retry after {int(_error_cache[resource_id] - time.time())}s)")
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(
-                self.BASE_URL,
-                params={"resource_id": resource_id, "limit": 10000},
-                headers=self._headers(),
-            )
+        params: dict = {"resource_id": resource_id, "limit": 10000}
+        headers: dict = {}
+        key = os.getenv("DATAGOV_API_KEY")
+        if key:
+            headers["X-Api-Key"] = key
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(self.BASE_URL, params=params, headers=headers)
         if resp.status_code == 429:
-            _error_cache[resource_id] = time.time() + ERROR_CACHE_TTL
-            raise NEAClientError(f"NEA API error: HTTP 429 (rate limited — set DATAGOV_API_KEY in .env)")
+            raise NEAClientError("NEA API error: HTTP 429 (rate limited — set DATAGOV_API_KEY in .env)")
         if resp.status_code != 200:
             raise NEAClientError(f"NEA API error: HTTP {resp.status_code}")
         body = resp.json()
@@ -81,20 +72,28 @@ class NEAClient:
         return centres
 
     async def get_hygiene_grades(self) -> dict[str, HygieneResult]:
-        """Return hygiene results keyed by uppercase stall name."""
+        """Return hygiene results keyed by uppercase licensee name.
+
+        New dataset fields (as of 2025-12):
+          licensee_name, licence_number, premises_address,
+          grade, demerit_points, suspension_start_date, suspension_end_date
+        """
         records = await self._fetch(self.HYGIENE_RESOURCE)
         grades: dict[str, HygieneResult] = {}
         for r in records:
             try:
-                stall_name = r.get("LICENSEE_NAME", r.get("BUSINESS_NAME", "UNKNOWN"))
-                centre_name = r.get("BUSINESS_NAME", stall_name)
-                status = r.get("STATUS", "")
+                stall_name = r.get("licensee_name", "UNKNOWN")
+                address = r.get("premises_address", "")
+                demerit_raw = r.get("demerit_points", "0")
+                demerit = int(demerit_raw) if str(demerit_raw).isdigit() else 0
+                suspension_start = r.get("suspension_start_date", "na")
+                suspended = suspension_start not in ("na", "", None)
                 grades[stall_name.upper()] = HygieneResult(
                     stall_name=stall_name,
-                    centre_name=centre_name,
-                    grade=r.get("GRADE", ""),
-                    demerit_points=int(r.get("DEMERIT_POINTS", 0)),
-                    suspended="SUSPENDED" in status.upper(),
+                    centre_name=address,
+                    grade=r.get("grade", ""),
+                    demerit_points=demerit,
+                    suspended=suspended,
                 )
             except (KeyError, ValueError):
                 continue  # skip malformed records
