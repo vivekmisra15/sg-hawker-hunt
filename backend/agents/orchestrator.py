@@ -26,6 +26,9 @@ Extract from the user's query and return ONLY valid JSON with these keys:
   location_hint: string (a place name or area, "" if not specified)
   dietary: list of strings (e.g. ["halal", "vegetarian"], [] if none)
   avoid: list of strings (things the user wants to avoid, [] if none)
+  budget: "cheap" if query contains budget/cheap/affordable/value/economical keywords,
+          "moderate" if query contains splurge/premium/expensive keywords,
+          "any" otherwise
 No markdown, no explanation — just the JSON object."""
 
 
@@ -137,7 +140,7 @@ class OrchestratorAgent:
             return json.loads(raw)
         except Exception as e:
             logger.warning("Query parse failed (%s) — using defaults", e)
-            return {"cuisine_type": "", "location_hint": "", "dietary": [], "avoid": []}
+            return {"cuisine_type": "", "location_hint": "", "dietary": [], "avoid": [], "budget": "any"}
 
     async def _resolve_location(
         self, request: SearchRequest, location_hint: str
