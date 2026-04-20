@@ -32,3 +32,6 @@ Thumbs.db
 
 # Dev log (local only)
 dev-log/
+
+# Data files (local only — managed outside version control)
+backend/data/
