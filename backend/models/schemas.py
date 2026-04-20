@@ -35,6 +35,13 @@ class LocationResult(BaseModel):
     reasoning_trace: str = ""
 
 
+class SentimentResult(BaseModel):
+    sentiment_score: float = 0.0   # -1.0 (negative) to +1.0 (positive)
+    hygiene_concerns: bool = False
+    queue_signal: str = "unknown"  # "short" | "long" | "unknown"
+    standout_quote: str = ""
+
+
 class RankedRecommendation(BaseModel):
     stall_name: str
     centre_name: str
@@ -46,6 +53,7 @@ class RankedRecommendation(BaseModel):
     is_open: bool
     distance_km: float
     google_rating: Optional[float] = None
+    standout_quote: Optional[str] = None
     score: float = 0.0
 
 
