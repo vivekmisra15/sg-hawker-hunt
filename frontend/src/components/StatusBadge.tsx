@@ -11,8 +11,10 @@ export function StatusBadge({ type, value }: StatusBadgeProps) {
     let cls = '';
     if (grade === 'A') cls = 'bg-green-500/20 text-green-400 border border-green-500/30';
     else if (grade === 'B') cls = 'bg-amber-500/20 text-amber-400 border border-amber-500/30';
-    else cls = 'bg-red-500/20 text-red-400 border border-red-500/30';
-    return <span className={`${base} ${cls}`}>Grade {grade || '?'}</span>;
+    else if (grade === 'C' || grade === 'D') cls = 'bg-red-500/20 text-red-400 border border-red-500/30';
+    else cls = 'bg-white/5 text-white/30 border border-white/10';  // UNKNOWN — neutral, not alarming
+    const label = grade === 'UNKNOWN' ? 'Grade —' : `Grade ${grade || '?'}`;
+    return <span className={`${base} ${cls}`}>{label}</span>;
   }
 
   if (type === 'michelin') {
