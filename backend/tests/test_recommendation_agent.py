@@ -17,12 +17,8 @@ def _make_anthropic(sentiment: SentimentResult | None = None):
     """Return a mock Anthropic client that yields a fixed sentiment JSON response."""
     client = AsyncMock()
     if sentiment is not None:
-        payload = json.dumps({
-            "sentiment_score": sentiment.sentiment_score,
-            "hygiene_concerns": sentiment.hygiene_concerns,
-            "queue_signal": sentiment.queue_signal,
-            "standout_quote": sentiment.standout_quote,
-        })
+        # Serialise all fields so new fields (peak_time_hint, price_signal) are included
+        payload = sentiment.model_dump_json()
         msg = MagicMock()
         msg.content = [MagicMock(text=payload)]
         client.messages.create = AsyncMock(return_value=msg)
@@ -37,12 +33,14 @@ def _loc(
     rating=4.2,
     review_count=100,
     reviews_summary=None,
+    price_level=None,
 ):
     return LocationResult(
         centre_name=centre_name, address="", lat=1.35, lng=103.82,
         distance_km=distance_km, is_open=is_open,
         google_rating=rating, review_count=review_count,
         reviews_summary=reviews_summary,
+        price_level=price_level,
         crowd_level=crowd,
     )
 
@@ -601,3 +599,214 @@ async def test_signal6_non_suspended_included():
             preferences={},
         )
     assert any(r.stall_name == "Active Stall" for r in results)
+
+# ── Signal 3A: peak_time_hint from Haiku ─────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_signal3a_peak_time_hint_matches_time_context_boosts():
+    """Haiku says 'best at lunch'; user querying for lunch → +0.5 via peak_time_hint path.
+    Newton has a neutral cuisine (not in any time bucket) so no cuisine prior fires there."""
+    vs = _make_vs([
+        _rag("Lunch Stall", "Maxwell", distance=0.3),
+        _rag("Baseline", "Newton", distance=0.3),
+    ])
+    # Override Newton's cuisine to something time-neutral (not in _TIME_CUISINE_MAP)
+    vs.query = MagicMock(return_value=[
+        _rag("Lunch Stall", "Maxwell", distance=0.3),
+        {**_rag("Baseline", "Newton", distance=0.3),
+         "metadata": {**_rag("Baseline", "Newton", distance=0.3)["metadata"],
+                      "cuisine": "rojak", "tags": "mixed fruit nuts"}},
+    ])
+    lunch_sentiment = _make_anthropic(SentimentResult(
+        sentiment_score=0.0, peak_time_hint="lunch"
+    ))
+    agent = _make_agent(vs, anthropic_client=lunch_sentiment)
+    with patch("agents.recommendation_agent._load_json_list", return_value=[]):
+        results = await agent.run(
+            query="lunch food",
+            location_results=[
+                _loc("Maxwell", reviews_summary="Best at lunchtime, always busy."),
+                _loc("Newton"),
+            ],
+            hygiene_results=[_hyg("Maxwell", grade="UNKNOWN"), _hyg("Newton", grade="UNKNOWN")],
+            preferences={"time_context": "lunch"},
+        )
+    lunch_rec = next(r for r in results if r.stall_name == "Lunch Stall")
+    baseline = next(r for r in results if r.stall_name == "Baseline")
+    # Maxwell: peak_time_hint=lunch matches time_context=lunch → +0.5
+    # Newton: neutral cuisine, no Haiku (no reviews), time_context=lunch → 0 (cuisine doesn't match)
+    assert lunch_rec.score > baseline.score
+
+
+@pytest.mark.asyncio
+async def test_signal3a_mismatched_peak_time_hint_no_boost():
+    """Haiku says 'best at breakfast'; user wants supper → no boost (no match)."""
+    vs = _make_vs([_rag("Brekkie Stall", "Maxwell", distance=0.3)])
+    breakfast_sentiment = _make_anthropic(SentimentResult(
+        sentiment_score=0.0, peak_time_hint="breakfast"
+    ))
+    agent = _make_agent(vs, anthropic_client=breakfast_sentiment)
+    with patch("agents.recommendation_agent._load_json_list", return_value=[]):
+        results_supper = await agent.run(
+            query="supper",
+            location_results=[_loc("Maxwell", reviews_summary="Great for early birds!")],
+            hygiene_results=[_hyg("Maxwell", grade="UNKNOWN")],
+            preferences={"time_context": "supper"},
+        )
+        results_any = await agent.run(
+            query="food",
+            location_results=[_loc("Maxwell", reviews_summary="Great for early birds!")],
+            hygiene_results=[_hyg("Maxwell", grade="UNKNOWN")],
+            preferences={"time_context": "any"},
+        )
+    # supper context but breakfast hint — no bonus in either direction
+    assert results_supper[0].score == results_any[0].score
+
+
+# ── Signal 3B: cuisine-based time priors ─────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_signal3b_breakfast_cuisine_boosts_for_breakfast_query():
+    """Kaya toast is a breakfast cuisine — querying for breakfast gives +0.5."""
+    vs = _make_vs([
+        _rag("Toast Stall", "Maxwell", distance=0.3),
+        _rag("Laksa Stall", "Newton", distance=0.3),
+    ])
+    # Override cuisine/tags in the RAG result
+    vs.query = MagicMock(return_value=[
+        {**_rag("Toast Stall", "Maxwell", distance=0.3),
+         "metadata": {**_rag("Toast Stall", "Maxwell", distance=0.3)["metadata"],
+                      "cuisine": "kaya toast", "tags": "toast breakfast"}},
+        _rag("Laksa Stall", "Newton", distance=0.3),
+    ])
+    agent = _make_agent(vs)
+    with patch("agents.recommendation_agent._load_json_list", return_value=[]):
+        results = await agent.run(
+            query="breakfast near Maxwell",
+            location_results=[_loc("Maxwell"), _loc("Newton")],
+            hygiene_results=[_hyg("Maxwell", grade="UNKNOWN"), _hyg("Newton", grade="UNKNOWN")],
+            preferences={"time_context": "breakfast"},
+        )
+    toast = next(r for r in results if r.stall_name == "Toast Stall")
+    laksa = next(r for r in results if r.stall_name == "Laksa Stall")
+    assert toast.score > laksa.score
+
+
+@pytest.mark.asyncio
+async def test_signal3b_supper_cuisine_penalised_for_breakfast_query():
+    """Bak kut teh is a supper food — querying for breakfast gives -0.5."""
+    vs = _make_vs([
+        _rag("BKT Stall", "Maxwell", distance=0.3),
+        _rag("Neutral Stall", "Newton", distance=0.3),
+    ])
+    vs.query = MagicMock(return_value=[
+        {**_rag("BKT Stall", "Maxwell", distance=0.3),
+         "metadata": {**_rag("BKT Stall", "Maxwell", distance=0.3)["metadata"],
+                      "cuisine": "bak kut teh", "tags": "pork ribs supper"}},
+        _rag("Neutral Stall", "Newton", distance=0.3),
+    ])
+    agent = _make_agent(vs)
+    with patch("agents.recommendation_agent._load_json_list", return_value=[]):
+        results = await agent.run(
+            query="breakfast",
+            location_results=[_loc("Maxwell"), _loc("Newton")],
+            hygiene_results=[_hyg("Maxwell", grade="UNKNOWN"), _hyg("Newton", grade="UNKNOWN")],
+            preferences={"time_context": "breakfast"},
+        )
+    bkt = next(r for r in results if r.stall_name == "BKT Stall")
+    neutral = next(r for r in results if r.stall_name == "Neutral Stall")
+    assert bkt.score < neutral.score
+
+
+# ── Signal 5A: Google Places priceLevel ──────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_signal5a_places_price_level_boosts_inexpensive_for_cheap_query():
+    """Places returns PRICE_LEVEL_INEXPENSIVE → treated as cheap stall → +1 for budget query."""
+    vs = _make_vs([
+        _rag("Cheap Place", "Maxwell", distance=0.3),   # no price_range in metadata
+        _rag("Pricey Place", "Newton", distance=0.3),
+    ])
+    agent = _make_agent(vs)
+    with patch("agents.recommendation_agent._load_json_list", return_value=[]):
+        results = await agent.run(
+            query="cheap food",
+            location_results=[
+                _loc("Maxwell", price_level="PRICE_LEVEL_INEXPENSIVE"),
+                _loc("Newton", price_level="PRICE_LEVEL_EXPENSIVE"),
+            ],
+            hygiene_results=[_hyg("Maxwell", grade="UNKNOWN"), _hyg("Newton", grade="UNKNOWN")],
+            preferences={"budget": "cheap"},
+        )
+    cheap = next(r for r in results if r.stall_name == "Cheap Place")
+    pricey = next(r for r in results if r.stall_name == "Pricey Place")
+    # INEXPENSIVE upper=5 → +1; EXPENSIVE upper=25 → -1; delta=2
+    assert cheap.score > pricey.score
+
+
+@pytest.mark.asyncio
+async def test_signal5a_places_price_level_ignored_when_metadata_present():
+    """Seeded price_range takes priority over Places priceLevel."""
+    vs = _make_vs([
+        _rag("Stall A", "Maxwell", distance=0.3, price_range="S$3-5"),  # seeded cheap
+    ])
+    agent = _make_agent(vs)
+    with patch("agents.recommendation_agent._load_json_list", return_value=[]):
+        # Even if Places says expensive, the seeded S$3-5 should dominate
+        results_places_expensive = await agent.run(
+            query="food",
+            location_results=[_loc("Maxwell", price_level="PRICE_LEVEL_EXPENSIVE")],
+            hygiene_results=[_hyg("Maxwell", grade="UNKNOWN")],
+            preferences={"budget": "cheap"},
+        )
+        results_no_places = await agent.run(
+            query="food",
+            location_results=[_loc("Maxwell", price_level=None)],
+            hygiene_results=[_hyg("Maxwell", grade="UNKNOWN")],
+            preferences={"budget": "cheap"},
+        )
+    # Both should give the same score — seeded S$3-5 wins in both cases
+    assert results_places_expensive[0].score == results_no_places[0].score
+
+
+# ── Signal 5B: Haiku price_signal ────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_signal5b_review_price_signal_used_as_fallback():
+    """When neither seeded price_range nor Places priceLevel is available,
+    Haiku's price_signal from reviews is used."""
+    vs = _make_vs([
+        _rag("Value Stall", "Maxwell", distance=0.3),  # no price_range
+        _rag("Baseline", "Newton", distance=0.3),
+    ])
+    cheap_sentiment = _make_anthropic(SentimentResult(
+        sentiment_score=0.0, price_signal="cheap"
+    ))
+    agent = _make_agent(vs, anthropic_client=cheap_sentiment)
+    with patch("agents.recommendation_agent._load_json_list", return_value=[]):
+        results = await agent.run(
+            query="cheap food",
+            location_results=[
+                _loc("Maxwell", price_level=None, reviews_summary="So cheap, only $3 a bowl!"),
+                _loc("Newton"),
+            ],
+            hygiene_results=[_hyg("Maxwell", grade="UNKNOWN"), _hyg("Newton", grade="UNKNOWN")],
+            preferences={"budget": "cheap"},
+        )
+    value = next(r for r in results if r.stall_name == "Value Stall")
+    baseline = next(r for r in results if r.stall_name == "Baseline")
+    # cheap price_signal → upper=5.0 → +1 for budget="cheap"
+    assert value.score > baseline.score
+
+
+# ── Signal 2: Singlish-aware prompt structure ─────────────────────────────────
+
+def test_singlish_prompt_contains_local_terms():
+    """Haiku prompt must include Singlish glossary and queue reinterpretation."""
+    from agents.recommendation_agent import _SENTIMENT_SYSTEM
+    assert "shiok" in _SENTIMENT_SYSTEM
+    assert "ho jiak" in _SENTIMENT_SYSTEM
+    assert "sedap" in _SENTIMENT_SYSTEM
+    assert "queue" in _SENTIMENT_SYSTEM.lower()
+    assert "peak_time_hint" in _SENTIMENT_SYSTEM
+    assert "price_signal" in _SENTIMENT_SYSTEM

@@ -10,11 +10,11 @@ Scoring weights:
   RAG relevance:   up to +2  (2 * (1 - cosine_distance), capped 0–2)
   Google rating:   +2 (≥4.5) | +1 (≥4.0) | -1 (<3.5)
   Review count:    +1 (≥200 reviews)
-  LLM sentiment:   -1.0 to +1.0 (claude-haiku-4-5)
+  LLM sentiment:   -1.0 to +1.0 (claude-haiku-4-5, Singlish-aware)
   Hygiene concern: -0.5 (review-flagged)
-  Time-aware:      ±1 (best_time / avoid_time vs current SGT hour)
+  Time-aware:      ±1 seeded metadata | ±0.5 peak_time_hint/time_context | ±0.5 cuisine priors
   Demerit nuance:  +0.5 (0 demerits) | -0.5 (≥12 demerits), when grade known
-  Price match:     ±1 (budget preference vs stall price_range)
+  Price match:     ±1 seeded metadata | ±0.5 Places priceLevel | ±0.5 review price_signal
 """
 import asyncio
 import hashlib
@@ -43,12 +43,61 @@ _DIETARY_REQUIRES_VEGETARIAN = {"vegetarian", "vegan", "veggie"}
 _SENTIMENT_CACHE: dict[str, tuple[SentimentResult, float]] = {}
 _SENTIMENT_CACHE_TTL = 86400  # 24 hours
 
-_SENTIMENT_SYSTEM = """You are a food review analyst for Singapore hawker stalls.
-Analyse the provided reviews and return ONLY valid JSON with these keys:
+# Google Places priceLevel → proxy upper price bound (SGD)
+_PRICE_LEVEL_MAP: dict[str, float] = {
+    "PRICE_LEVEL_FREE": 2.0,
+    "PRICE_LEVEL_INEXPENSIVE": 5.0,
+    "PRICE_LEVEL_MODERATE": 12.0,
+    "PRICE_LEVEL_EXPENSIVE": 25.0,
+    "PRICE_LEVEL_VERY_EXPENSIVE": 50.0,
+}
+
+# Haiku price_signal → proxy upper price bound (SGD)
+_PRICE_SIGNAL_MAP: dict[str, float] = {
+    "cheap": 5.0,
+    "moderate": 12.0,
+    "expensive": 25.0,
+}
+
+# Cuisine keywords that strongly indicate a meal-time slot
+_TIME_CUISINE_MAP: dict[str, set[str]] = {
+    "breakfast": {"kaya toast", "toast", "congee", "porridge", "dim sum", "you tiao",
+                  "teh tarik", "kopi", "nasi lemak", "roti prata", "bak chor mee"},
+    "supper": {"bak kut teh", "frog porridge", "bbq stingray", "oyster omelette",
+               "wonton soup", "bak chor mee", "satay"},
+    "lunch": {"chicken rice", "char kway teow", "laksa", "duck rice", "wonton mee",
+              "nasi padang", "economy rice", "mixed rice"},
+    "dinner": {"char kway teow", "bbq", "satay", "steamboat", "seafood",
+               "fish head curry", "crab"},
+}
+
+_SENTIMENT_SYSTEM = """You are a food review analyst specialising in Singapore hawker stalls.
+Reviews may be written in English, Singlish, Malay, or a mix. Interpret local expressions correctly:
+
+Positive signals: "shiok", "ho jiak" (Hokkien: delicious), "sedap" (Malay: delicious),
+  "confirm plus chop" (definitely good), "die die must try" (must-try), "power", "steady",
+  "solid", "not bad leh", "damn good", "wah so nice", "best in Singapore", "legit".
+
+Negative signals: "jialat" (terrible), "lousy", "not worth it", "stale", "terrible",
+  "horrible", "overrated", "disappointing", "yucks".
+
+Queue interpretation: A long queue at a Singapore hawker stall is a POSITIVE quality signal —
+  it means the food is well-regarded. Do NOT treat "queue very long" or "always packed" as
+  a negative sentiment. Set queue_signal to "long" and keep sentiment_score positive.
+
+Terse reviews: Short reviews like "good", "nice", "ok lah", "steady", "not bad" are
+  genuinely positive in Singapore review culture — score them at least +0.3.
+
+Sentence-final particles "lah", "lor", "leh", "sia", "meh", "wah", "boh" carry tone,
+  not literal negative meaning. "Not bad lah" = positive. "Ok lor" = mildly positive.
+
+Return ONLY valid JSON with these keys:
   sentiment_score: float from -1.0 (very negative) to 1.0 (very positive)
-  hygiene_concerns: true if reviews mention dirty, unclean, cockroach, pest, or similar, else false
-  queue_signal: "short" if queues mentioned as quick or short waits, "long" if long waits or crowds, else "unknown"
-  standout_quote: the single most useful sentence for a potential customer, or ""
+  hygiene_concerns: true if reviews mention dirty, unclean, cockroach, pest, or "not clean", else false
+  queue_signal: "short" if queues quick/short, "long" if long waits or packed, else "unknown"
+  standout_quote: the single most useful sentence for a potential customer (preserve original language), or ""
+  peak_time_hint: "breakfast" | "lunch" | "dinner" | "supper" if reviews suggest a best time to visit, else "unknown"
+  price_signal: "cheap" if reviews mention low prices/value/affordable, "expensive" if pricey/overpriced, "moderate" if mid-range, else "unknown"
 No markdown, no explanation — just the JSON object."""
 
 _SGT = pytz.timezone("Asia/Singapore")
@@ -68,7 +117,6 @@ def _parse_time_range(s: str) -> list[tuple[int, int]]:
         return []
     s_lower = s.lower()
 
-    # Normalise am/pm tokens to 24h integers
     def to_24h(hour: int, meridiem: str) -> int:
         if meridiem == "pm" and hour != 12:
             return hour + 12
@@ -76,7 +124,6 @@ def _parse_time_range(s: str) -> list[tuple[int, int]]:
             return 0
         return hour
 
-    # Named periods
     if "early morning" in s_lower:
         return [(6, 10)]
     if "late night" in s_lower or "after midnight" in s_lower:
@@ -84,7 +131,6 @@ def _parse_time_range(s: str) -> list[tuple[int, int]]:
 
     results: list[tuple[int, int]] = []
 
-    # Pattern: "12pm-2pm", "11:30am-1pm", "6pm-8pm"
     range_re = re.compile(
         r"(\d{1,2})(?::\d{2})?\s*(am|pm)\s*[-–to]+\s*(\d{1,2})(?::\d{2})?\s*(am|pm)",
         re.IGNORECASE,
@@ -95,7 +141,6 @@ def _parse_time_range(s: str) -> list[tuple[int, int]]:
         if end > start:
             results.append((start, end))
 
-    # Pattern: "before 11:30am" → (0, 11), "after 2pm" → (14, 24)
     before_re = re.compile(r"before\s+(\d{1,2})(?::\d{2})?\s*(am|pm)", re.IGNORECASE)
     after_re = re.compile(r"after\s+(\d{1,2})(?::\d{2})?\s*(am|pm)", re.IGNORECASE)
     for m in before_re.finditer(s_lower):
@@ -113,11 +158,32 @@ def _parse_price_upper(price_range_str: str) -> Optional[float]:
     m = re.search(r"[\$S]+\d+[-–](\d+)", price_range_str)
     if m:
         return float(m.group(1))
-    # Single price like "S$5"
     m2 = re.search(r"[\$S]+(\d+)", price_range_str)
     if m2:
         return float(m2.group(1))
     return None
+
+
+def _price_upper_from_level(price_level: Optional[str]) -> Optional[float]:
+    """Convert a Google Places priceLevel enum string to an upper price bound."""
+    if not price_level:
+        return None
+    return _PRICE_LEVEL_MAP.get(price_level)
+
+
+def _cuisine_time_score(cuisine_combined: str, time_context: str) -> float:
+    """Score ±0.5 based on whether the stall's cuisine fits the user's time intent."""
+    if time_context == "any":
+        return 0.0
+    match_cuisines = _TIME_CUISINE_MAP.get(time_context, set())
+    # Opposite meal slots (breakfast vs supper are inversely correlated)
+    opposite = {"breakfast": "supper", "supper": "breakfast", "lunch": "", "dinner": ""}.get(time_context, "")
+    opposite_cuisines = _TIME_CUISINE_MAP.get(opposite, set()) if opposite else set()
+    if any(c in cuisine_combined for c in match_cuisines):
+        return 0.5
+    if any(c in cuisine_combined for c in opposite_cuisines):
+        return -0.5
+    return 0.0
 
 
 _NEUTRAL_SENTIMENT = SentimentResult()
@@ -141,14 +207,14 @@ class RecommendationAgent:
     ) -> list[RankedRecommendation]:
         """
         Return up to 3 ranked recommendations.
-        preferences keys: cuisine_type, dietary (list[str]), avoid (list[str]), budget (str)
+        preferences keys: cuisine_type, dietary (list[str]), avoid (list[str]),
+                          budget (str), time_context (str)
         """
         michelin_names = _load_json_list(os.path.join(_DATA_DIR, "michelin_2025.json"))
         halal_names = _load_json_list(os.path.join(_DATA_DIR, "halal_stalls.json"))
 
         rag_results = self._vs.query(query, n_results=10)
 
-        # Build lookup maps
         loc_map: dict[str, LocationResult] = {r.centre_name.upper(): r for r in location_results}
         hygiene_map: dict[str, HygieneResult] = {r.centre_name.upper(): r for r in hygiene_results}
 
@@ -159,6 +225,7 @@ class RecommendationAgent:
         requires_halal = any(d in _DIETARY_REQUIRES_HALAL for d in dietary)
         requires_vegetarian = any(d in _DIETARY_REQUIRES_VEGETARIAN for d in dietary)
         budget = preferences.get("budget", "any")
+        time_context = preferences.get("time_context", "any")
 
         current_hour = datetime.now(_SGT).hour
 
@@ -192,8 +259,13 @@ class RecommendationAgent:
             crowd_level = loc.crowd_level if loc else "unknown"
             google_rating = loc.google_rating if loc else None
             review_count = loc.review_count if loc else None
+            price_level = loc.price_level if loc else None
             grade = hygiene.grade if hygiene else "UNKNOWN"
             demerit_points = hygiene.demerit_points if hygiene else 0
+
+            sentiment = sentiment_map.get(centre_name.upper(), _NEUTRAL_SENTIMENT)
+
+            cuisine_combined = (meta.get("cuisine", "") + " " + meta.get("tags", "")).lower()
 
             # ── Scoring ───────────────────────────────────────────────────────
             score = 0.0
@@ -218,21 +290,27 @@ class RecommendationAgent:
                 elif google_rating < 3.5:
                     score -= 1
             if review_count is not None and review_count >= 200:
-                score += 1  # high-confidence signal
+                score += 1
 
             # Signal 2: LLM sentiment
-            sentiment = sentiment_map.get(centre_name.upper(), _NEUTRAL_SENTIMENT)
             score += max(-1.0, min(1.0, sentiment.sentiment_score))
             if sentiment.hygiene_concerns:
                 score -= 0.5
 
-            # Signal 3: time-aware
+            # Signal 3: time-aware (tiered — seeded metadata → Haiku hint → cuisine prior)
             best_ranges = _parse_time_range(meta.get("best_time", ""))
             avoid_ranges = _parse_time_range(meta.get("avoid_time", ""))
             if any(s <= current_hour < e for s, e in best_ranges):
-                score += 1
+                score += 1   # seeded metadata — high confidence
             elif any(s <= current_hour < e for s, e in avoid_ranges):
                 score -= 1
+            elif sentiment.peak_time_hint != "unknown" and time_context != "any":
+                # Haiku-extracted hint vs user's stated time intent
+                if sentiment.peak_time_hint == time_context:
+                    score += 0.5  # e.g. user wants lunch, reviews say "best at lunch"
+            elif time_context != "any":
+                # Cuisine-based prior as final fallback (Signal 3B)
+                score += _cuisine_time_score(cuisine_combined, time_context)
 
             # Signal 4: demerit nuance (only when grade is known)
             if grade not in ("UNKNOWN", ""):
@@ -241,16 +319,22 @@ class RecommendationAgent:
                 elif demerit_points >= 12:
                     score -= 0.5
 
-            # Signal 5: price range preference
+            # Signal 5: price range preference (tiered — seeded → Places level → review signal)
             price_upper = _parse_price_upper(meta.get("price_range", ""))
-            if budget == "cheap" and price_upper is not None:
-                if price_upper <= 6:
-                    score += 1
-                elif price_upper > 12:
-                    score -= 1
-            elif budget == "moderate" and price_upper is not None:
-                if 6 < price_upper <= 12:
-                    score += 0.5
+            if price_upper is None:
+                price_upper = _price_upper_from_level(price_level)        # Signal 5A
+            if price_upper is None and sentiment.price_signal != "unknown":
+                price_upper = _PRICE_SIGNAL_MAP.get(sentiment.price_signal)  # Signal 5B
+
+            if price_upper is not None:
+                if budget == "cheap":
+                    if price_upper <= 6:
+                        score += 1
+                    elif price_upper > 12:
+                        score -= 1
+                elif budget == "moderate":
+                    if 6 < price_upper <= 12:
+                        score += 0.5
 
             # ── Reasoning string ──────────────────────────────────────────────
             michelin_note = " Michelin Bib Gourmand 2025." if is_michelin else ""
@@ -268,7 +352,6 @@ class RecommendationAgent:
                 rating_note = f" Rated {google_rating}/5{count_part}."
 
             hygiene_concern_note = " ⚠️ Hygiene concerns mentioned in reviews." if sentiment.hygiene_concerns else ""
-
             quote_note = f' "{sentiment.standout_quote}"' if sentiment.standout_quote else ""
 
             reasoning = (
@@ -336,7 +419,7 @@ class RecommendationAgent:
         try:
             response = await self._anthropic.messages.create(
                 model="claude-haiku-4-5-20251001",
-                max_tokens=200,
+                max_tokens=256,
                 system=_SENTIMENT_SYSTEM,
                 messages=[{"role": "user", "content": reviews_summary[:2000]}],
             )
@@ -351,6 +434,8 @@ class RecommendationAgent:
                     hygiene_concerns=bool(data.get("hygiene_concerns", False)),
                     queue_signal=str(data.get("queue_signal", "unknown")),
                     standout_quote=str(data.get("standout_quote", "")),
+                    peak_time_hint=str(data.get("peak_time_hint", "unknown")),
+                    price_signal=str(data.get("price_signal", "unknown")),
                 )
         except json.JSONDecodeError as e:
             logger.debug("Sentiment JSON parse failed (%s) — using neutral", e)

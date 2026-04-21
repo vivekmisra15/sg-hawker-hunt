@@ -43,7 +43,7 @@ class PlacesClient:
             "X-Goog-FieldMask": (
                 "places.name,places.displayName,places.location,"
                 "places.rating,places.userRatingCount,"
-                "places.currentOpeningHours"
+                "places.currentOpeningHours,places.priceLevel"
             ),
         }
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -69,7 +69,7 @@ class PlacesClient:
             "X-Goog-Api-Key": key,
             "X-Goog-FieldMask": (
                 "name,displayName,rating,userRatingCount,"
-                "currentOpeningHours,reviews"
+                "currentOpeningHours,reviews,priceLevel"
             ),
         }
         async with httpx.AsyncClient(timeout=10.0) as client:
