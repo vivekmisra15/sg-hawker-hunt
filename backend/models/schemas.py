@@ -31,6 +31,7 @@ class LocationResult(BaseModel):
     google_rating: Optional[float] = None
     review_count: Optional[int] = None
     reviews_summary: Optional[str] = None
+    price_level: Optional[str] = None  # Google Places priceLevel enum string
     crowd_level: str = "unknown"  # quiet | busy | unknown
     reasoning_trace: str = ""
 
@@ -40,6 +41,8 @@ class SentimentResult(BaseModel):
     hygiene_concerns: bool = False
     queue_signal: str = "unknown"  # "short" | "long" | "unknown"
     standout_quote: str = ""
+    peak_time_hint: str = "unknown"  # "breakfast" | "lunch" | "dinner" | "supper" | "unknown"
+    price_signal: str = "unknown"    # "cheap" | "moderate" | "expensive" | "unknown"
 
 
 class RankedRecommendation(BaseModel):

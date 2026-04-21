@@ -76,6 +76,7 @@ class LocationAgent:
             base_rating = place.get("rating")
             base_count = place.get("userRatingCount")
             is_open = place.get("currentOpeningHours", {}).get("openNow", False)
+            price_level: str | None = place.get("priceLevel")
 
             # Fetch details for reviews if we have a valid place_id
             reviews_summary: str | None = None
@@ -85,6 +86,7 @@ class LocationAgent:
                     is_open = details.get("currentOpeningHours", {}).get("openNow", is_open)
                     base_rating = details.get("rating", base_rating)
                     base_count = details.get("userRatingCount", base_count)
+                    price_level = details.get("priceLevel", price_level)
                     reviews = details.get("reviews", [])
                     if reviews:
                         snippets = [
@@ -118,6 +120,7 @@ class LocationAgent:
                     google_rating=base_rating,
                     review_count=base_count,
                     reviews_summary=reviews_summary,
+                    price_level=price_level,
                     crowd_level=crowd,
                     reasoning_trace=trace,
                 )

@@ -29,6 +29,11 @@ Extract from the user's query and return ONLY valid JSON with these keys:
   budget: "cheap" if query contains budget/cheap/affordable/value/economical keywords,
           "moderate" if query contains splurge/premium/expensive keywords,
           "any" otherwise
+  time_context: "breakfast" if query mentions morning/breakfast/before 10am/kopi/toast,
+                "lunch" if query mentions lunch/midday/noon/1pm/after work,
+                "dinner" if query mentions dinner/evening/tonight/7pm,
+                "supper" if query mentions supper/late night/after 10pm/midnight,
+                "any" otherwise
 No markdown, no explanation — just the JSON object."""
 
 
@@ -140,7 +145,7 @@ class OrchestratorAgent:
             return json.loads(raw)
         except Exception as e:
             logger.warning("Query parse failed (%s) — using defaults", e)
-            return {"cuisine_type": "", "location_hint": "", "dietary": [], "avoid": [], "budget": "any"}
+            return {"cuisine_type": "", "location_hint": "", "dietary": [], "avoid": [], "budget": "any", "time_context": "any"}
 
     async def _resolve_location(
         self, request: SearchRequest, location_hint: str
