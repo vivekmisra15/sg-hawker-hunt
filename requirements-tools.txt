@@ -1,0 +1,7 @@
+# Optional scraping dependencies — not needed for the main app.
+# Install only when running sfa_scraper.py to generate hygiene_grades_full.json.
+#
+#   pip install -r requirements-tools.txt
+#   playwright install chromium
+playwright>=1.40.0
+beautifulsoup4>=4.12.0

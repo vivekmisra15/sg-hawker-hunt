@@ -3,10 +3,15 @@ NEA (National Environment Agency) API client.
 Fetches hawker centre locations, hygiene grades, and closure dates from data.gov.sg.
 """
 import httpx
+import json
+import logging
 import os
 import time
 from datetime import datetime
+from pathlib import Path
 from models.schemas import CentreInfo, HygieneResult
+
+logger = logging.getLogger(__name__)
 
 
 class NEAClientError(Exception):
@@ -15,6 +20,44 @@ class NEAClientError(Exception):
 
 _cache: dict = {}  # module-level singleton: {resource_id: (records, timestamp)}
 CACHE_TTL_SECONDS = 3600
+
+# ── Static grades (from sfa_scraper.py output) ───────────────────────────────
+_GRADES_FILE = Path(__file__).parent.parent / "data" / "hygiene_grades_full.json"
+_static_grades: dict | None = None  # lazy-loaded; None = not yet attempted
+
+
+def _load_static_grades() -> dict:
+    """
+    Lazy-load hygiene_grades_full.json into a dict keyed by CENTRE_NAME.upper().
+    Each value is a list of stall dicts with licensee_name, grade, demerit_points, suspended.
+    Returns {} if the file doesn't exist or can't be parsed.
+    """
+    global _static_grades
+    if _static_grades is not None:
+        return _static_grades
+    if not _GRADES_FILE.exists():
+        logger.debug("Static grades file not found at %s — run sfa_scraper.py to generate it", _GRADES_FILE)
+        _static_grades = {}
+        return _static_grades
+    try:
+        with open(_GRADES_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+        centres = data.get("centres", {})
+        # Build lookup keyed by centre_name.upper() for fuzzy matching
+        by_name: dict = {}
+        for postal_code, centre in centres.items():
+            name_key = centre.get("centre_name", "").upper().strip()
+            if name_key:
+                by_name[name_key] = centre
+        _static_grades = by_name
+        logger.info(
+            "Loaded static grades for %d centres from %s",
+            len(by_name), _GRADES_FILE.name,
+        )
+    except (json.JSONDecodeError, OSError, KeyError) as e:
+        logger.warning("Failed to load static grades file: %s", e)
+        _static_grades = {}
+    return _static_grades
 
 
 class NEAClient:
@@ -98,6 +141,39 @@ class NEAClient:
             except (KeyError, ValueError):
                 continue  # skip malformed records
         return grades
+
+    def get_static_hygiene_for_centre(self, centre_name: str) -> list[HygieneResult]:
+        """
+        Return stall-level HygieneResult list from the static grades file for one centre.
+        Uses fuzzy name matching (substring in either direction).
+        Returns [] if static file not loaded or no match found.
+        """
+        by_name = _load_static_grades()
+        if not by_name:
+            return []
+        centre_upper = centre_name.upper().strip()
+        # Try exact match first, then substring match
+        centre_data = by_name.get(centre_upper)
+        if centre_data is None:
+            for key, val in by_name.items():
+                if centre_upper in key or key in centre_upper:
+                    centre_data = val
+                    break
+        if centre_data is None:
+            return []
+        results = []
+        for stall in centre_data.get("stalls", []):
+            demerit = stall.get("demerit_points", 0)
+            results.append(
+                HygieneResult(
+                    stall_name=stall.get("licensee_name", "UNKNOWN"),
+                    centre_name=centre_data.get("centre_name", centre_name),
+                    grade=stall.get("grade", "UNKNOWN"),
+                    demerit_points=demerit if isinstance(demerit, int) else 0,
+                    suspended=bool(stall.get("suspended", False)),
+                )
+            )
+        return results
 
     async def get_closure_dates(self) -> list[str]:
         """Return centre names with closures in the current month."""
