@@ -524,3 +524,68 @@ Vegetarian query limitation: "near Toa Payoh" pulls results toward central stall
 
 ---
 
+## Session Notes — Milestone 4 (2026-04-21)
+
+### Six quality signals activated in `RecommendationAgent`
+
+Max possible score raised from 11 to ~17.5. All signals degrade gracefully when data is absent.
+
+| Signal | Mechanism | Breadth |
+|---|---|---|
+| Google rating | ≥4.5→+2, ≥4.0→+1, <3.5→-1; review_count≥200→+1 | All 20 Places results |
+| LLM sentiment | `claude-haiku-4-5-20251001` structured JSON; ±1 sentiment, −0.5 hygiene concern | All 20 Places results with reviews |
+| Time-aware | `_parse_time_range()` regex normaliser vs current SGT hour; ±1 | 71 seeded stalls |
+| Demerit nuance | 0 demerits +0.5, ≥12 demerits −0.5 (grade known only) | NEA-matched centres |
+| Price preference | Budget keyword → "cheap"/"moderate"/"any"; upper price bound matched | 71 seeded stalls |
+| Suspension filter | Hard exclude before scoring (was trace-only before) | All centres |
+
+### New Pydantic model: `SentimentResult`
+
+Added to `models/schemas.py`: `sentiment_score`, `hygiene_concerns`, `queue_signal`, `standout_quote`.
+`RankedRecommendation` gains `standout_quote: Optional[str]`.
+
+### Orchestrator query parsing extended
+
+`_PARSE_SYSTEM` prompt now extracts `budget: "cheap" | "moderate" | "any"` from user query.
+Fallback default is `"any"`.
+
+### LLM sentiment implementation details
+
+- `_build_sentiment_map()` in `RecommendationAgent` runs all centre sentiment calls via `asyncio.gather` before scoring loop
+- Module-level `_SENTIMENT_CACHE` keyed by SHA-256 of first 500 chars of reviews, 24h TTL
+- Empty Haiku response (`raw == ""`) caught before `json.loads` → neutral, DEBUG log
+- `json.JSONDecodeError` caught at DEBUG level (not WARNING) — live testing showed Haiku returning empty responses for centres with sparse reviews, causing log spam
+- Genuine network errors still log at WARNING
+- `_NEUTRAL_SENTIMENT` singleton returned on any failure path
+
+### `_parse_time_range()` helper
+
+Free-text time normaliser for ChromaDB metadata. Handles: range patterns (`"12pm-2pm"`),
+before/after patterns (`"before 11:30am"`, `"after 2pm"`), named periods (`"early morning"`).
+Returns `[]` for unrecognised strings — safe fallback.
+
+### `_parse_price_upper()` helper
+
+Extracts upper price bound from strings like `"S$5-7"`, `"$3-5"`, `"S$18"`. Returns `None` on
+failure — scoring skipped.
+
+### Frontend fixes
+
+- `frontend/src/types/index.ts`: Added `standout_quote?: string | null` to `RankedRecommendation`
+- `frontend/src/components/StatusBadge.tsx`: `Grade UNKNOWN` now renders neutral grey with label
+  `"Grade —"` instead of red `"Grade UNKNOWN"` — prevents false alarm for missing data
+- C and D grades remain red (genuine hygiene concern)
+
+### Test results — Milestone 4
+- 58/58 tests passing (28 new tests added this milestone)
+- Signals 1/3/4/5/6: sync scoring tests with mock location/hygiene data
+- Signal 2: async tests with `AsyncMock` Anthropic client; cache behaviour verified
+- Time-aware tests: patch `agents.recommendation_agent.datetime` (same pattern as location agent)
+
+### Live test observation (from screenshot)
+- `"laksa in the east"` → correct top 3 (328 Katong Laksa, Selera Rasa Nasi Lemak, Sungei Road Laksa)
+- `google_rating` absent for these results (Places API not returning ratings for these centres) — handled gracefully
+- Sentiment analysis triggered empty Haiku responses (sparse reviews) → fixed by empty-guard + DEBUG log level
+
+---
+
