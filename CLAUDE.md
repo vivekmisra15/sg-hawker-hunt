@@ -672,3 +672,80 @@ near-island-wide coverage without any new API integrations.
 
 ---
 
+## Session Notes — Milestone 5 (2026-04-21)
+
+### SFA hygiene data — background
+
+SFA (Singapore Food Agency) replaced NEA as the hygiene grading authority in Jan 2026 under
+the **SAFE** framework. Grades are only accessible via the SFA Track Records web UI — no public
+API. All stalls show UNKNOWN in live operation; this milestone generates a static fallback file.
+
+### New grade values under SAFE framework
+
+| Raw grade | Normalised |
+|---|---|
+| A, B, C, D | Same |
+| NEW | B (new operator, no violations yet) |
+| NOT_UNDER_SAFE | UNKNOWN (exempt premises) |
+| A_UNDER_REVIEW | A |
+| B_UNDER_REVIEW | B |
+| NEW_UNDER_REVIEW | B |
+
+### `backend/tools/sfa_scraper.py` — NEW
+
+Playwright headless browser scraper. One-off CLI tool; **not** part of the app runtime.
+
+- Fetches all NEA hawker centre postal codes from data.gov.sg
+- For each centre, searches SFA Track Records by postal code and extracts grade table
+- Checkpoint pattern: writes per-centre result immediately so crashes can resume
+- Exponential backoff: 3 retries at 5s, 15s, 45s (±2s jitter) per centre
+- One browser instance reused across all centres to minimise overhead
+- CLI: `--fresh`, `--postal-codes`, `--delay`, `--dry-run`
+
+**Usage after installing tools:**
+```bash
+pip install -r requirements-tools.txt && playwright install chromium
+cd backend
+python -m tools.sfa_scraper --dry-run        # preview
+python -m tools.sfa_scraper --postal-codes 068805  # test one centre
+python -m tools.sfa_scraper                  # full run (~10–15 min)
+```
+
+**Output** (both gitignored via `backend/data/`):
+- `backend/data/hygiene_grades_full.json` — consolidated grades by postal code
+- `backend/data/scrape_checkpoint.json` — per-centre progress for crash recovery
+
+### `requirements-tools.txt` — NEW
+
+`playwright>=1.40.0`, `beautifulsoup4>=4.12.0` — separate from `requirements.txt`
+so the main app has no Playwright dependency.
+
+### `backend/tools/nea_client.py` — modified
+
+- `_GRADES_FILE` path constant pointing to `backend/data/hygiene_grades_full.json`
+- `_load_static_grades()` lazy-loads the file once, builds a dict keyed by `CENTRE_NAME.upper()`
+  Returns `{}` if file doesn't exist — zero crash risk
+- `NEAClient.get_static_hygiene_for_centre(name)` — synchronous; fuzzy name match (exact then substring)
+  Returns `list[HygieneResult]` or `[]`
+
+### `backend/agents/hygiene_agent.py` — modified
+
+**Tiered data source:**
+1. Live data.gov.sg API (existing)
+2. Static `hygiene_grades_full.json` (new fallback, triggered when live API has no match)
+3. UNKNOWN (graceful degradation when neither available)
+
+**Enhanced trace when static data used:**
+```
+Maxwell Food Centre: 58/72 stalls Grade A (SFA data), open today.
+```
+
+### Test results — Milestone 5
+- 68/68 passing (+2 new tests)
+- `test_static_grades_fallback_when_live_api_no_match` — static grades used when live returns empty
+- `test_static_grades_suspended_flag_from_static_data` — suspended propagates from static stall
+- `_make_mock_nea()` updated to stub `get_static_hygiene_for_centre` — prevents MagicMock iterator
+  bug where `min()` on a truthy but empty-iterating mock would raise ValueError
+
+---
+

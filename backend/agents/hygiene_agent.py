@@ -56,13 +56,32 @@ class HygieneAgent:
                 demerit = min(r.demerit_points for r in matching)
                 suspended = any(r.suspended for r in matching)
                 stall_name = matching[0].stall_name
+                data_source = "live"
             else:
-                grade = "UNKNOWN"
-                demerit = 0
-                suspended = False
-                stall_name = centre_name
+                # Live API had no match — try static grades from sfa_scraper output
+                static_stalls = self._nea.get_static_hygiene_for_centre(centre_name)
+                if static_stalls:
+                    grade = _best_grade([r.grade for r in static_stalls])
+                    demerit = min(r.demerit_points for r in static_stalls)
+                    suspended = any(r.suspended for r in static_stalls)
+                    stall_name = static_stalls[0].stall_name
+                    data_source = "static"
+                else:
+                    grade = "UNKNOWN"
+                    demerit = 0
+                    suspended = False
+                    stall_name = centre_name
+                    data_source = "none"
 
-            parts = [f"{centre_name}: Grade {grade}, {demerit} demerit points"]
+            # Build enhanced reasoning trace
+            if data_source == "static":
+                static_stalls = self._nea.get_static_hygiene_for_centre(centre_name)
+                total = len(static_stalls)
+                grade_a_count = sum(1 for s in static_stalls if s.grade == "A")
+                grade_summary = f"{grade_a_count}/{total} stalls Grade A" if total > 0 else f"Grade {grade}"
+                parts = [f"{centre_name}: {grade_summary} (SFA data)"]
+            else:
+                parts = [f"{centre_name}: Grade {grade}, {demerit} demerit points"]
             if suspended:
                 parts.append("⚠️ suspension on record")
             if is_closed:
