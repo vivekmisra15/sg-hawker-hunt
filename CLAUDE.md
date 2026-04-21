@@ -589,3 +589,86 @@ failure — scoring skipped.
 
 ---
 
+## Session Notes — Milestone 4 Signal Expansion (2026-04-21)
+
+### Problem addressed
+Signal 3 (time-aware) and Signal 5 (price) had limited breadth — both depended solely on
+ChromaDB seed metadata, covering only 71 stalls. This session expanded both signals to
+near-island-wide coverage without any new API integrations.
+
+### Signal 3 expansion — two additional fallback tiers
+
+**Signal 3A: Haiku `peak_time_hint`**
+- Added `peak_time_hint: str = "unknown"` to `SentimentResult` schema
+- Haiku prompt extended to extract when reviews say a stall is best visited
+  (e.g. "always packed at lunch", "great for late-night supper")
+- In scoring: if `peak_time_hint` matches `time_context` from user query → `+0.5`
+- Fires for all 20 Places results that have reviews — no extra API call
+
+**Signal 3B: Cuisine-based time priors**
+- `_cuisine_time_score()` helper added to `recommendation_agent.py`
+- `_TIME_CUISINE_MAP` maps cuisine keywords to time buckets:
+  - breakfast: kaya toast, congee, dim sum, you tiao, teh tarik, roti prata
+  - supper: bak kut teh, frog porridge, bbq stingray, oyster omelette
+  - lunch: chicken rice, char kway teow, laksa, duck rice, mixed rice
+  - dinner: bbq, satay, steamboat, seafood, fish head curry
+- Scoring: cuisine matches `time_context` → `+0.5`; opposite slot → `−0.5`
+- Fires for all 71 seeded stalls (cuisine/tags are always present in metadata)
+- Tiering: seeded `best_time`/`avoid_time` (±1) → Haiku hint (±0.5) → cuisine prior (±0.5)
+  Only the first matching tier fires — prevents double-counting
+
+**`time_context` extraction added to OrchestratorAgent `_PARSE_SYSTEM`**
+- New key: `time_context: "breakfast" | "lunch" | "dinner" | "supper" | "any"`
+- Fallback default: `"any"`
+
+### Signal 5 expansion — two additional fallback tiers
+
+**Signal 5A: Google Places `priceLevel`**
+- `priceLevel` added to `fieldMask` in both `PlacesClient.search_nearby()` and `get_place_details()`
+- `price_level: Optional[str]` added to `LocationResult` schema
+- `LocationAgent` extracts and stores `priceLevel` from both search and detail responses
+- `_PRICE_LEVEL_MAP` in `recommendation_agent.py` converts enum strings to proxy upper bounds:
+  - `PRICE_LEVEL_INEXPENSIVE` → S$5 | `PRICE_LEVEL_MODERATE` → S$12 | `PRICE_LEVEL_EXPENSIVE` → S$25
+- Fires for all 20 Places results — zero extra quota cost (field already returned in existing call)
+
+**Signal 5B: Haiku `price_signal`**
+- Added `price_signal: str = "unknown"` to `SentimentResult` schema
+- Haiku prompt extended to extract "cheap"/"moderate"/"expensive" from review text
+- `_PRICE_SIGNAL_MAP` converts to proxy upper bound for existing budget scoring
+- Fires as final fallback when neither seeded `price_range` nor Places `priceLevel` available
+
+**Price scoring priority order (tiered):**
+1. Seeded `price_range` metadata (71 stalls, most precise)
+2. Google Places `priceLevel` (all 20 Places results per query)
+3. Haiku `price_signal` from reviews (all results with reviews)
+
+### Signal 2 — Singlish-aware prompt rewrite
+
+`_SENTIMENT_SYSTEM` in `recommendation_agent.py` fully rewritten:
+- **Explicit Singlish glossary**: shiok, ho jiak, sedap, confirm plus chop, die die must try,
+  power, steady, jialat mapped to positive/negative sentiment
+- **Queue inversion**: long queues at hawker stalls = quality signal → positive, not negative.
+  Haiku was previously treating "always packed" as a complaint.
+- **Terse review calibration**: "good", "nice", "ok lah" scored ≥ +0.3 (Singapore review culture)
+- **Particle awareness**: lah, lor, leh, sia, meh, wah treated as tone markers, not sentiment
+- `standout_quote` instruction updated to preserve original language (Singlish quotes kept intact)
+
+### Schema changes
+- `LocationResult`: added `price_level: Optional[str]`
+- `SentimentResult`: added `peak_time_hint: str`, `price_signal: str`
+- No changes to `RankedRecommendation` (new signals feed into `reasoning` string)
+
+### Test mock fix
+- `_make_anthropic()` helper in tests was manually serialising `SentimentResult` fields,
+  missing `peak_time_hint` and `price_signal` → both always returned `"unknown"` in mocks
+- Fixed to use `sentiment.model_dump_json()` — serialises all fields automatically,
+  future-proof against further schema additions
+
+### Test results — Signal Expansion
+- 66/66 tests passing (8 new tests added)
+- New tests: Signal 3A (peak_time_hint match/mismatch), Signal 3B (breakfast boost, supper penalty),
+  Signal 5A (priceLevel boost, seeded metadata priority), Signal 5B (review price_signal fallback),
+  Signal 2 (Singlish prompt structure assertion)
+
+---
+
