@@ -28,6 +28,7 @@ export interface RankedRecommendation {
   is_open: boolean;
   distance_km: number;
   google_rating?: number;
+  standout_quote?: string | null;
   score?: number;
 }
 

@@ -341,15 +341,22 @@ class RecommendationAgent:
                 messages=[{"role": "user", "content": reviews_summary[:2000]}],
             )
             raw = response.content[0].text.strip()
-            data = json.loads(raw)
-            result = SentimentResult(
-                sentiment_score=float(data.get("sentiment_score", 0.0)),
-                hygiene_concerns=bool(data.get("hygiene_concerns", False)),
-                queue_signal=str(data.get("queue_signal", "unknown")),
-                standout_quote=str(data.get("standout_quote", "")),
-            )
+            if not raw:
+                logger.debug("Empty Haiku response for sentiment — using neutral")
+                result = _NEUTRAL_SENTIMENT
+            else:
+                data = json.loads(raw)
+                result = SentimentResult(
+                    sentiment_score=float(data.get("sentiment_score", 0.0)),
+                    hygiene_concerns=bool(data.get("hygiene_concerns", False)),
+                    queue_signal=str(data.get("queue_signal", "unknown")),
+                    standout_quote=str(data.get("standout_quote", "")),
+                )
+        except json.JSONDecodeError as e:
+            logger.debug("Sentiment JSON parse failed (%s) — using neutral", e)
+            result = _NEUTRAL_SENTIMENT
         except Exception as e:
-            logger.warning("Sentiment parse error: %s", e)
+            logger.warning("Sentiment analysis error: %s", e)
             result = _NEUTRAL_SENTIMENT
 
         _SENTIMENT_CACHE[cache_key] = (result, time.time())
