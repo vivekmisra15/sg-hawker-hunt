@@ -127,7 +127,7 @@ async def test_halal_filter_removes_non_halal_stalls():
 
 
 @pytest.mark.asyncio
-async def test_returns_maximum_three_results():
+async def test_returns_maximum_five_results():
     vs = _make_vs([
         _rag(f"Stall {i}", f"Centre {i}", distance=0.3) for i in range(8)
     ])
@@ -139,7 +139,7 @@ async def test_returns_maximum_three_results():
             hygiene_results=[_hyg(f"Centre {i}") for i in range(8)],
             preferences={},
         )
-    assert len(results) <= 3
+    assert len(results) <= 5
 
 
 @pytest.mark.asyncio
