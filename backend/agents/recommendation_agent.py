@@ -340,10 +340,14 @@ class RecommendationAgent:
             michelin_note = " Michelin Bib Gourmand 2025." if is_michelin else ""
             halal_note = " Halal certified." if is_halal else ""
             open_note = "Currently open." if is_open else "Currently closed."
-            crowd_note = (
-                f"{'Busy' if crowd_level == 'busy' else 'Quiet'} period — "
-                f"{'expect queues' if crowd_level == 'busy' else 'good time to visit'}."
-            )
+            if not is_open:
+                crowd_note = ""
+            elif crowd_level == "busy":
+                crowd_note = "Busy period — expect queues."
+            elif crowd_level == "quiet":
+                crowd_note = "Quiet period — good time to visit."
+            else:
+                crowd_note = ""
             dist_note = f"{distance_km:.1f}km from you." if distance_km < 99 else ""
 
             rating_note = ""
@@ -354,11 +358,12 @@ class RecommendationAgent:
             hygiene_concern_note = " ⚠️ Hygiene concerns mentioned in reviews." if sentiment.hygiene_concerns else ""
             quote_note = f' "{sentiment.standout_quote}"' if sentiment.standout_quote else ""
 
+            timing_note = f" {crowd_note}" if crowd_note else ""
             reasoning = (
                 f"{stall_name} at {centre_name}."
                 f" Grade {grade} hygiene.{michelin_note}{halal_note}"
                 f"{rating_note}"
-                f" {open_note} {dist_note} {crowd_note}"
+                f" {open_note} {dist_note}{timing_note}"
                 f"{hygiene_concern_note}{quote_note}"
             ).strip()
 
