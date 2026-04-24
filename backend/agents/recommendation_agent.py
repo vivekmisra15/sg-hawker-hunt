@@ -380,10 +380,10 @@ class RecommendationAgent:
             )
 
         candidates.sort(key=lambda c: c.score, reverse=True)
-        top3 = candidates[:3]
-        for i, rec in enumerate(top3, start=1):
+        top_n = candidates[:5]
+        for i, rec in enumerate(top_n, start=1):
             rec.rank = i
-        return top3
+        return top_n
 
     async def _build_sentiment_map(
         self, location_results: list[LocationResult]
