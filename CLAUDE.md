@@ -749,3 +749,41 @@ Maxwell Food Centre: 58/72 stalls Grade A (SFA data), open today.
 
 ---
 
+## Session Notes — Post-Milestone 5 Fixes (2026-04-24)
+
+### Three bugs fixed from live testing
+
+#### Fix 1 — Result count: 3 → 5
+`candidates[:3]` → `candidates[:5]` in `recommendation_agent.py`. Test updated to match.
+
+#### Fix 2 — SFA scraper rewritten (Playwright → direct REST API)
+
+The original Playwright scraper failed at every layer:
+- SFA URL changed: `/food-safety/food-hygiene/track-records` → 404. Correct: `/tools-and-resources/track-records`
+- NEA dataset uses lowercase fields (`name`, `address_myenv`) — not `NAME`, `ADDRESSPOSTALCODE`
+- Postal code must be extracted from `address_myenv` via `Singapore\s+(\d{6})` regex
+- Playwright installed into system Python, not venv
+
+**Key discovery:** JS inspection of `track-record.js` revealed a direct REST API:
+```
+GET https://www.sfa.gov.sg/api/TrackRecord/GetTrackRecord?postalCode=069184&...
+```
+Load the page once for `ASP.NET_SessionId` cookie, then all subsequent calls are plain httpx GETs.
+- 0.2s per centre (was ~90s with Playwright) — 122 centres in ~2 minutes
+- No Playwright/Chromium needed — `httpx` is sufficient
+- 404 response triggers session re-init + retry (handles expired cookies mid-run)
+
+**Live scrape result (2026-04-24):** 122/122 centres, ~4,800+ stalls.
+Maxwell Food Centre: `100 stalls (A:73, B:25, UNKNOWN:2)`
+
+Note: SFA API does not return `demerit_points` or `suspended` — both default to 0/false.
+
+#### Fix 3 — "Closed + good time to visit" contradiction
+`crowd_note` was unconditionally appended regardless of open status.
+Fixed: `crowd_note = ""` when `is_open is False`. Only shown when open AND crowd data present.
+
+### Test results — Session 09
+68/68 passing (no new tests — fixes covered by existing test surface).
+
+---
+
