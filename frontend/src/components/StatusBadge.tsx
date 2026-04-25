@@ -9,17 +9,20 @@ export function StatusBadge({ type, value }: StatusBadgeProps) {
   if (type === 'grade') {
     const grade = value?.toUpperCase() ?? '';
     let cls = '';
-    if (grade === 'A') cls = 'bg-green-500/20 text-green-400 border border-green-500/30';
-    else if (grade === 'B') cls = 'bg-amber-500/20 text-amber-400 border border-amber-500/30';
-    else if (grade === 'C' || grade === 'D') cls = 'bg-red-500/20 text-red-400 border border-red-500/30';
-    else cls = 'bg-white/5 text-white/30 border border-white/10';  // UNKNOWN — neutral, not alarming
+    if (grade === 'A') cls = 'bg-success-bg text-success border border-success/30';
+    else if (grade === 'B') cls = 'bg-warning-bg text-warning border border-warning/30';
+    else if (grade === 'C' || grade === 'D') cls = 'bg-danger-bg text-danger border border-danger/30';
+    else cls = 'bg-neutral-bg text-neutral border border-neutral/30';
     const label = grade === 'UNKNOWN' ? 'Grade —' : `Grade ${grade || '?'}`;
     return <span className={`${base} ${cls}`}>{label}</span>;
   }
 
   if (type === 'michelin') {
     return (
-      <span className={`${base} bg-amber-500/10 text-amber-300 border border-amber-500/40`}>
+      <span
+        className={`${base} bg-warning-bg text-warning border border-warning/30`}
+        style={{ textShadow: '0 0 8px rgba(245,158,11,0.5)' }}
+      >
         ⭐ Bib Gourmand
       </span>
     );
@@ -27,7 +30,7 @@ export function StatusBadge({ type, value }: StatusBadgeProps) {
 
   if (type === 'halal') {
     return (
-      <span className={`${base} bg-green-500/10 text-green-400 border border-green-500/30`}>
+      <span className={`${base} bg-success-bg text-success border border-success/30`}>
         ☾ Halal
       </span>
     );
@@ -35,8 +38,8 @@ export function StatusBadge({ type, value }: StatusBadgeProps) {
 
   if (type === 'open') {
     return (
-      <span className={`${base} bg-green-500/10 text-green-400 border border-green-500/30`}>
-        <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+      <span className={`${base} bg-success-bg text-success border border-success/30`}>
+        <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
         Open now
       </span>
     );
@@ -44,8 +47,8 @@ export function StatusBadge({ type, value }: StatusBadgeProps) {
 
   if (type === 'closed') {
     return (
-      <span className={`${base} bg-white/5 text-white/40 border border-white/10`}>
-        <span className="w-1.5 h-1.5 rounded-full bg-white/30" />
+      <span className={`${base} bg-neutral-bg text-neutral border border-neutral/30`}>
+        <span className="w-1.5 h-1.5 rounded-full bg-neutral" />
         Closed
       </span>
     );
@@ -54,8 +57,8 @@ export function StatusBadge({ type, value }: StatusBadgeProps) {
   if (type === 'crowd') {
     const busy = value === 'busy';
     return (
-      <span className={`${base} ${busy ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30' : 'bg-green-500/10 text-green-400 border border-green-500/30'}`}>
-        <span className={`w-1.5 h-1.5 rounded-full ${busy ? 'bg-amber-400' : 'bg-green-400'}`} />
+      <span className={`${base} ${busy ? 'bg-warning-bg text-warning border border-warning/30' : 'bg-success-bg text-success border border-success/30'}`}>
+        <span className={`w-1.5 h-1.5 rounded-full ${busy ? 'bg-warning' : 'bg-success'}`} />
         {busy ? 'Busy now' : 'Quiet'}
       </span>
     );
