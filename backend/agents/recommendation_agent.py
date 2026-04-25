@@ -213,7 +213,7 @@ class RecommendationAgent:
         michelin_names = _load_json_list(os.path.join(_DATA_DIR, "michelin_2025.json"))
         halal_names = _load_json_list(os.path.join(_DATA_DIR, "halal_stalls.json"))
 
-        rag_results = self._vs.query(query, n_results=10)
+        rag_results = self._vs.query(query, n_results=15)
 
         loc_map: dict[str, LocationResult] = {r.centre_name.upper(): r for r in location_results}
         hygiene_map: dict[str, HygieneResult] = {r.centre_name.upper(): r for r in hygiene_results}
@@ -379,13 +379,17 @@ class RecommendationAgent:
                     is_open=is_open,
                     distance_km=distance_km,
                     google_rating=google_rating,
+                    review_count=review_count,
+                    crowd_level=crowd_level,
                     standout_quote=sentiment.standout_quote or None,
                     score=round(score, 3),
+                    lat=loc.lat if loc else None,
+                    lng=loc.lng if loc else None,
                 )
             )
 
         candidates.sort(key=lambda c: c.score, reverse=True)
-        top_n = candidates[:5]
+        top_n = candidates[:10]
         for i, rec in enumerate(top_n, start=1):
             rec.rank = i
         return top_n

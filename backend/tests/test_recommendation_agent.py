@@ -127,19 +127,42 @@ async def test_halal_filter_removes_non_halal_stalls():
 
 
 @pytest.mark.asyncio
-async def test_returns_maximum_five_results():
+async def test_returns_maximum_ten_results():
     vs = _make_vs([
-        _rag(f"Stall {i}", f"Centre {i}", distance=0.3) for i in range(8)
+        _rag(f"Stall {i}", f"Centre {i}", distance=0.3) for i in range(12)
     ])
     agent = _make_agent(vs)
     with patch("agents.recommendation_agent._load_json_list", return_value=[]):
         results = await agent.run(
             query="food",
-            location_results=[_loc(f"Centre {i}") for i in range(8)],
-            hygiene_results=[_hyg(f"Centre {i}") for i in range(8)],
+            location_results=[_loc(f"Centre {i}") for i in range(12)],
+            hygiene_results=[_hyg(f"Centre {i}") for i in range(12)],
             preferences={},
         )
-    assert len(results) <= 5
+    assert len(results) <= 10
+
+
+@pytest.mark.asyncio
+async def test_result_carries_location_signals():
+    """lat, lng, review_count, crowd_level flow through from LocationResult."""
+    vs = _make_vs([_rag("Test Stall", "Maxwell", distance=0.3)])
+    agent = _make_agent(vs)
+    loc = _loc("Maxwell", rating=4.5, review_count=500, crowd="busy")
+    loc.lat = 1.2802
+    loc.lng = 103.8455
+    with patch("agents.recommendation_agent._load_json_list", return_value=[]):
+        results = await agent.run(
+            query="chicken rice",
+            location_results=[loc],
+            hygiene_results=[_hyg("Maxwell")],
+            preferences={},
+        )
+    assert len(results) == 1
+    r = results[0]
+    assert r.lat == pytest.approx(1.2802)
+    assert r.lng == pytest.approx(103.8455)
+    assert r.review_count == 500
+    assert r.crowd_level == "busy"
 
 
 @pytest.mark.asyncio
