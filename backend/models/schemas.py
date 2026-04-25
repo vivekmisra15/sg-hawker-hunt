@@ -56,8 +56,12 @@ class RankedRecommendation(BaseModel):
     is_open: bool
     distance_km: float
     google_rating: Optional[float] = None
+    review_count: Optional[int] = None
+    crowd_level: str = "unknown"
     standout_quote: Optional[str] = None
     score: float = 0.0
+    lat: Optional[float] = None
+    lng: Optional[float] = None
 
 
 class CentreInfo(BaseModel):
