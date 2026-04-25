@@ -13,7 +13,7 @@ function App() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <div className="max-w-6xl mx-auto px-4 py-8">
+      <div className="max-w-7xl mx-auto px-4 py-8">
 
         {/* Header */}
         <header className="flex items-center justify-between mb-8">
@@ -38,7 +38,7 @@ function App() {
           isSearching={state === 'searching'}
         />
 
-        {/* Content — single column at idle, two-column when active */}
+        {/* Content area */}
         <AnimatePresence>
           {isActive && (
             <motion.div
@@ -48,52 +48,48 @@ function App() {
               transition={{ type: 'spring', stiffness: 280, damping: 32, delay: 0.05 }}
               className="mt-6 flex flex-col lg:flex-row gap-6 items-start"
             >
-              {/* Agent panel — sidebar on desktop */}
+              {/* Agent panel — narrow left sidebar on desktop */}
               <motion.div
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ type: 'spring', stiffness: 300, damping: 30, delay: 0.05 }}
-                className="w-full lg:w-72 lg:shrink-0 lg:sticky lg:top-8"
+                className="w-full lg:w-64 lg:shrink-0 lg:sticky lg:top-8"
               >
                 <AgentPanel traces={traces} state={state} />
               </motion.div>
 
-              {/* Results + map */}
+              {/* Results list */}
               <motion.div
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ type: 'spring', stiffness: 300, damping: 30, delay: 0.1 }}
-                className="flex-1 min-w-0 flex flex-col lg:flex-row gap-6 items-start"
+                className="flex-1 min-w-0"
               >
-                {/* Results list */}
-                <div className="flex-1 min-w-0">
-                  <ResultsList recommendations={results} state={state} />
-
-                  {/* Mobile map toggle (below results) */}
-                  {showMap && (
-                    <div className="mt-4 lg:hidden">
-                      <HawkerMap recommendations={results} />
-                    </div>
-                  )}
-                </div>
-
-                {/* Desktop map — right column, sticky */}
-                {showMap && (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.97 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ type: 'spring', stiffness: 300, damping: 30, delay: 0.15 }}
-                    className="hidden lg:block lg:w-80 xl:w-96 lg:shrink-0"
-                  >
-                    <div className="sticky top-8 h-[calc(100vh-6rem)] rounded-xl overflow-hidden border border-border">
-                      <HawkerMap recommendations={results} desktopOnly />
-                    </div>
-                  </motion.div>
-                )}
+                <ResultsList recommendations={results} state={state} />
               </motion.div>
+
+              {/* Map — right column, sticky, always shown when results ready */}
+              {showMap && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.97 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ type: 'spring', stiffness: 300, damping: 30, delay: 0.2 }}
+                  className="hidden lg:block lg:w-80 xl:w-96 lg:shrink-0 lg:sticky lg:top-8"
+                  style={{ height: 'calc(100vh - 6rem)' }}
+                >
+                  <HawkerMap recommendations={results} />
+                </motion.div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Mobile map — shown below results */}
+        {showMap && (
+          <div className="lg:hidden mt-4" style={{ height: '320px' }}>
+            <HawkerMap recommendations={results} />
+          </div>
+        )}
 
       </div>
     </div>

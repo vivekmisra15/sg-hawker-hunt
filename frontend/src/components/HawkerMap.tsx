@@ -1,143 +1,157 @@
-import { useState, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import Map, { NavigationControl } from 'react-map-gl/mapbox';
-import 'mapbox-gl/dist/mapbox-gl.css';
+import { useEffect, useRef } from 'react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import { RankedRecommendation } from '../types';
-import { MapMarker } from './MapMarker';
-import { MapDetailPanel } from './MapDetailPanel';
 import { useTheme } from '../context/ThemeContext';
-
-const TOKEN = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined;
 
 interface HawkerMapProps {
   recommendations: RankedRecommendation[];
-  /** When true, renders the map canvas directly (no mobile button wrapper). Use inside a sized container. */
-  desktopOnly?: boolean;
 }
+
+const LIGHT_TILES = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+const DARK_TILES  = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+const TILE_ATTR   = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
 
 function withCoords(recs: RankedRecommendation[]) {
   return recs.filter(r => r.lat != null && r.lng != null);
 }
 
-function getBounds(recs: RankedRecommendation[]): [[number, number], [number, number]] | null {
-  const points = withCoords(recs);
-  if (points.length === 0) return null;
-  const lngs = points.map(r => r.lng!);
-  const lats = points.map(r => r.lat!);
-  return [
-    [Math.min(...lngs), Math.min(...lats)],
-    [Math.max(...lngs), Math.max(...lats)],
-  ];
+function mapsUrl(stallName: string, centreName: string) {
+  return `https://www.google.com/maps/search/?api=1&query=${
+    encodeURIComponent(`${stallName} ${centreName} Singapore`)
+  }`;
 }
 
-function MapCanvas({
-  recommendations,
-  mapStyle,
-}: {
-  recommendations: RankedRecommendation[];
-  mapStyle: string;
-}) {
-  const [selectedRank, setSelectedRank] = useState<number | null>(null);
-  const bounds = getBounds(recommendations);
+function makeMarkerIcon(rank: number): L.DivIcon {
+  return L.divIcon({
+    className: '',
+    iconSize: [34, 34],
+    iconAnchor: [17, 34],
+    popupAnchor: [0, -36],
+    html: `
+      <div style="
+        width:34px;height:34px;border-radius:50%;
+        background:#f59e0b;color:#000;
+        display:flex;align-items:center;justify-content:center;
+        font-family:Geist,DM Sans,system-ui,sans-serif;
+        font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;
+        box-shadow:0 2px 8px rgba(0,0,0,0.35);
+        border:2px solid rgba(255,255,255,0.6);
+      ">${rank}</div>
+    `,
+  });
+}
+
+export function HawkerMap({ recommendations }: HawkerMapProps) {
+  const { theme } = useTheme();
+  const mapRef = useRef<L.Map | null>(null);
+  const tileRef = useRef<L.TileLayer | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
   const mapped = withCoords(recommendations);
 
-  const selectedRec = selectedRank != null
-    ? recommendations.find(r => r.rank === selectedRank) ?? null
-    : null;
+  // Initialise map once
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current) return;
 
-  const handleMarkerClick = useCallback((rank: number) => {
-    setSelectedRank(prev => (prev === rank ? null : rank));
+    const map = L.map(containerRef.current, {
+      zoomControl: false,
+      attributionControl: true,
+    });
+
+    L.control.zoom({ position: 'topright' }).addTo(map);
+
+    const tileUrl = theme === 'dark' ? DARK_TILES : LIGHT_TILES;
+    const tile = L.tileLayer(tileUrl, { attribution: TILE_ATTR, maxZoom: 18 });
+    tile.addTo(map);
+
+    mapRef.current = map;
+    tileRef.current = tile;
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+      tileRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Swap tile layer when theme changes
+  useEffect(() => {
+    if (!mapRef.current || !tileRef.current) return;
+    const map = mapRef.current;
+    tileRef.current.remove();
+    const tileUrl = theme === 'dark' ? DARK_TILES : LIGHT_TILES;
+    const newTile = L.tileLayer(tileUrl, { attribution: TILE_ATTR, maxZoom: 18 });
+    newTile.addTo(map);
+    tileRef.current = newTile;
+  }, [theme]);
+
+  // Add/update markers whenever recommendations change
+  useEffect(() => {
+    if (!mapRef.current) return;
+    const map = mapRef.current;
+
+    // Clear existing markers (except tile layer)
+    map.eachLayer(layer => {
+      if (layer instanceof L.Marker) map.removeLayer(layer);
+    });
+
+    if (mapped.length === 0) return;
+
+    const bounds: [number, number][] = [];
+
+    mapped.forEach(rec => {
+      const lat = rec.lat!;
+      const lng = rec.lng!;
+      bounds.push([lat, lng]);
+
+      const marker = L.marker([lat, lng], { icon: makeMarkerIcon(rec.rank) });
+
+      const ratingHtml = rec.google_rating != null
+        ? `<span style="color:#f59e0b">★</span> ${rec.google_rating.toFixed(1)}${rec.review_count ? ` <span style="opacity:.6">(${rec.review_count.toLocaleString()})</span>` : ''}`
+        : '';
+
+      const gradeColor: Record<string, string> = {
+        A: '#16a34a', B: '#d97706', C: '#dc2626', D: '#dc2626',
+      };
+      const gradeHtml = rec.hygiene_grade !== 'UNKNOWN'
+        ? `<span style="color:${gradeColor[rec.hygiene_grade] ?? '#737373'}">Grade ${rec.hygiene_grade}</span>`
+        : '';
+
+      const distHtml = rec.distance_km < 99
+        ? `${rec.distance_km.toFixed(1)} km away`
+        : '';
+
+      const meta = [gradeHtml, ratingHtml, distHtml].filter(Boolean).join(' &nbsp;·&nbsp; ');
+
+      marker.bindPopup(`
+        <div style="font-family:Geist,DM Sans,system-ui,sans-serif;min-width:200px;max-width:240px">
+          <div style="font-weight:600;font-size:14px;margin-bottom:2px">${rec.stall_name}</div>
+          <div style="font-size:12px;opacity:.65;margin-bottom:6px">${rec.centre_name}</div>
+          ${meta ? `<div style="font-size:11px;margin-bottom:8px">${meta}</div>` : ''}
+          <a href="${mapsUrl(rec.stall_name, rec.centre_name)}" target="_blank" rel="noopener noreferrer"
+            style="font-size:12px;color:#f59e0b;text-decoration:none;font-weight:500">
+            View on Google Maps ↗
+          </a>
+        </div>
+      `, { maxWidth: 260 });
+
+      marker.addTo(map);
+    });
+
+    if (bounds.length > 0) {
+      map.fitBounds(bounds, { padding: [48, 48], maxZoom: 15 });
+    }
+  }, [recommendations]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (mapped.length === 0) return null;
+
   return (
-    <div className="relative w-full h-full">
-      <Map
-        mapboxAccessToken={TOKEN}
-        mapStyle={mapStyle}
-        initialViewState={
-          bounds
-            ? { bounds, fitBoundsOptions: { padding: 60, maxZoom: 15 } }
-            : { longitude: 103.8198, latitude: 1.3521, zoom: 12 }
-        }
-        style={{ width: '100%', height: '100%' }}
-      >
-        <NavigationControl position="top-right" />
-        {mapped.map(rec => (
-          <MapMarker
-            key={rec.rank}
-            recommendation={rec}
-            isSelected={selectedRank === rec.rank}
-            onClick={() => handleMarkerClick(rec.rank)}
-          />
-        ))}
-      </Map>
-
-      <AnimatePresence>
-        {selectedRec && (
-          <MapDetailPanel
-            recommendation={selectedRec}
-            onClose={() => setSelectedRank(null)}
-          />
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-export function HawkerMap({ recommendations, desktopOnly = false }: HawkerMapProps) {
-  const { theme } = useTheme();
-  const [showMobileMap, setShowMobileMap] = useState(false);
-
-  if (!TOKEN) return null;
-  if (withCoords(recommendations).length === 0) return null;
-
-  const mapStyle = theme === 'dark'
-    ? 'mapbox://styles/mapbox/dark-v11'
-    : 'mapbox://styles/mapbox/light-v11';
-
-  // Desktop-only mode: just render the canvas (parent provides sized container)
-  if (desktopOnly) {
-    return <MapCanvas recommendations={recommendations} mapStyle={mapStyle} />;
-  }
-
-  // Mobile mode: show a "Show map" button that opens a bottom sheet
-  return (
-    <div className="lg:hidden">
-      <button
-        onClick={() => setShowMobileMap(true)}
-        className="w-full py-2 text-sm text-muted border border-border rounded-xl hover:border-border-strong hover:text-foreground transition-colors"
-      >
-        Show map ↑
-      </button>
-
-      <AnimatePresence>
-        {showMobileMap && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/40 z-40"
-              onClick={() => setShowMobileMap(false)}
-            />
-            <motion.div
-              initial={{ y: '100%' }}
-              animate={{ y: 0 }}
-              exit={{ y: '100%' }}
-              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="fixed bottom-0 left-0 right-0 h-[60vh] z-50 rounded-t-2xl overflow-hidden border-t border-border"
-            >
-              <MapCanvas recommendations={recommendations} mapStyle={mapStyle} />
-              <button
-                onClick={() => setShowMobileMap(false)}
-                className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center bg-background/80 backdrop-blur-sm rounded-full border border-border text-muted hover:text-foreground z-10"
-              >
-                ✕
-              </button>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-    </div>
+    <div
+      ref={containerRef}
+      className="w-full h-full rounded-xl overflow-hidden"
+      style={{ minHeight: '300px' }}
+    />
   );
 }
