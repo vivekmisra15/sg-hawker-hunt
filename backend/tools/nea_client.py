@@ -25,6 +25,22 @@ CACHE_TTL_SECONDS = 3600
 _GRADES_FILE = Path(__file__).parent.parent / "data" / "hygiene_grades_full.json"
 _static_grades: dict | None = None  # lazy-loaded; None = not yet attempted
 
+# Noise words stripped before Jaccard similarity comparison
+_NAME_STOP = {
+    "BLK", "BLOCK", "AVE", "AVENUE", "ST", "STREET", "RD", "ROAD",
+    "MARKET", "FOOD", "CENTRE", "CENTER", "HAWKER", "AND", "&", "THE",
+    "COOKED",
+}
+
+
+def _jaccard_similarity(a: str, b: str) -> float:
+    """Token-level Jaccard similarity, ignoring noise words."""
+    ta = {w for w in a.upper().split() if w not in _NAME_STOP and len(w) > 1}
+    tb = {w for w in b.upper().split() if w not in _NAME_STOP and len(w) > 1}
+    if not ta or not tb:
+        return 0.0
+    return len(ta & tb) / len(ta | tb)
+
 
 def _load_static_grades() -> dict:
     """
@@ -152,13 +168,26 @@ class NEAClient:
         if not by_name:
             return []
         centre_upper = centre_name.upper().strip()
-        # Try exact match first, then substring match
+        # 1. Exact match
         centre_data = by_name.get(centre_upper)
         if centre_data is None:
+            # 2. Substring match in either direction
             for key, val in by_name.items():
                 if centre_upper in key or key in centre_upper:
                     centre_data = val
                     break
+        if centre_data is None:
+            # 3. Jaccard similarity ≥ 0.4 — handles format differences like
+            #    "Clementi 448 Market & Food Centre" vs "Clementi Ave 3 Blk 448"
+            best_score = 0.0
+            best_val = None
+            for key, val in by_name.items():
+                score = _jaccard_similarity(centre_upper, key)
+                if score > best_score:
+                    best_score = score
+                    best_val = val
+            if best_score >= 0.4:
+                centre_data = best_val
         if centre_data is None:
             return []
         results = []
