@@ -21,7 +21,7 @@ interface AgentPanelProps {
 
 function TypewriterText({ text, isNew }: { text: string; isNew: boolean }) {
   if (!isNew) {
-    return <span className="text-green-300/70">{text}</span>;
+    return <span className="dark:text-green-300/70 text-emerald-800/80">{text}</span>;
   }
   return (
     <span>
@@ -31,7 +31,7 @@ function TypewriterText({ text, isNew }: { text: string; isNew: boolean }) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: i * 0.018, duration: 0 }}
-          className="text-green-300/70"
+          className="dark:text-green-300/70 text-emerald-800/80"
         >
           {char}
         </motion.span>
@@ -131,7 +131,7 @@ export function AgentPanel({ traces, state }: AgentPanelProps) {
             {/* Blinking cursor while searching */}
             {state === 'searching' && (
               <div className="px-4 pb-2">
-                <span className="cursor-blink text-green-400">▊</span>
+                <span className="cursor-blink dark:text-green-400 text-emerald-700">▊</span>
               </div>
             )}
 
