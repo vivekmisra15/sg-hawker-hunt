@@ -7,6 +7,12 @@ interface ResultCardProps {
   index: number;
 }
 
+function mapsUrl(stallName: string, centreName: string) {
+  return `https://www.google.com/maps/search/?api=1&query=${
+    encodeURIComponent(`${stallName} ${centreName} Singapore`)
+  }`;
+}
+
 function StarRating({ rating }: { rating: number }) {
   const full = Math.floor(rating);
   const hasHalf = rating - full >= 0.5;
@@ -39,17 +45,30 @@ function StarRating({ rating }: { rating: number }) {
 }
 
 export function ResultCard({ recommendation: r, index }: ResultCardProps) {
+  function handleClick(e: React.MouseEvent) {
+    // Don't fire if user selects text
+    if (window.getSelection()?.toString()) return;
+    e.preventDefault();
+    window.open(mapsUrl(r.stall_name, r.centre_name), '_blank', 'noopener,noreferrer');
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 16, scale: 0.96 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ type: 'spring', stiffness: 300, damping: 30, delay: index * 0.07 }}
       whileHover={{ y: -2, scale: 1.01, transition: { type: 'spring', stiffness: 400, damping: 25 } }}
-      className="relative bg-card rounded-xl border border-border hover:border-border-strong transition-colors p-5"
+      onClick={handleClick}
+      className="group relative bg-card rounded-xl border border-border hover:border-border-strong transition-colors p-5 cursor-pointer"
     >
       {/* Rank — barely visible watermark */}
       <span className="absolute top-4 right-5 text-5xl font-bold text-foreground/[0.06] leading-none select-none tabular">
         {r.rank}
+      </span>
+
+      {/* Maps link hint — appears on hover */}
+      <span className="absolute bottom-4 right-5 text-xs text-subtle opacity-0 group-hover:opacity-100 transition-opacity">
+        Maps ↗
       </span>
 
       {/* Name + centre */}
@@ -64,10 +83,13 @@ export function ResultCard({ recommendation: r, index }: ResultCardProps) {
         {r.is_michelin && <StatusBadge type="michelin" />}
         {r.is_halal && <StatusBadge type="halal" />}
         <StatusBadge type={r.is_open ? 'open' : 'closed'} />
+        {(r.crowd_level === 'busy' || r.crowd_level === 'quiet') && r.is_open && (
+          <StatusBadge type="crowd" value={r.crowd_level} />
+        )}
       </div>
 
-      {/* Distance + rating row */}
-      <div className="flex items-center gap-4 mt-3">
+      {/* Distance + rating + review count */}
+      <div className="flex items-center gap-4 mt-3 flex-wrap">
         {r.distance_km < 99 && (
           <span className="flex items-center gap-1 text-sm text-muted tabular">
             <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -83,6 +105,11 @@ export function ResultCard({ recommendation: r, index }: ResultCardProps) {
           <span className="flex items-center gap-1.5 text-sm text-muted">
             <StarRating rating={r.google_rating} />
             <span className="tabular">{r.google_rating.toFixed(1)}</span>
+            {r.review_count != null && (
+              <span className="text-xs text-subtle">
+                ({r.review_count.toLocaleString()})
+              </span>
+            )}
           </span>
         )}
       </div>
