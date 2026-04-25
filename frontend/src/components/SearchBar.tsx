@@ -1,4 +1,5 @@
 import { useState, useRef, KeyboardEvent } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useGeolocation } from '../hooks/useGeolocation';
 
 interface SearchBarProps {
@@ -31,7 +32,6 @@ export function SearchBar({ onSearch, isSearching }: SearchBarProps) {
   }
 
   function handleChip(chip: string) {
-    // Strip emoji prefix
     const text = chip.replace(/^[\p{Emoji}\s]+/u, '').trim();
     setQuery(text);
     inputRef.current?.focus();
@@ -39,8 +39,8 @@ export function SearchBar({ onSearch, isSearching }: SearchBarProps) {
 
   return (
     <div className="w-full space-y-3">
-      {/* Input row */}
-      <div className="relative flex items-center bg-[#1a1a1a] border border-white/10 rounded-xl transition-all duration-200 focus-within:border-amber-500/60 focus-within:ring-2 focus-within:ring-amber-500/20">
+      {/* Input row — glass morphism */}
+      <div className="relative flex items-center bg-background-raised/80 backdrop-blur-sm border border-border rounded-xl transition-all duration-200 focus-within:border-accent/60 focus-within:ring-2 focus-within:ring-accent/20">
         <input
           ref={inputRef}
           type="text"
@@ -49,7 +49,7 @@ export function SearchBar({ onSearch, isSearching }: SearchBarProps) {
           onKeyDown={handleKeyDown}
           disabled={isSearching}
           placeholder="Find hawker food... try 'laksa near Toa Payoh' or 'vegetarian Maxwell'"
-          className="flex-1 bg-transparent px-4 py-3 text-base text-white placeholder-white/30 outline-none disabled:opacity-50"
+          className="flex-1 bg-transparent px-4 py-3 text-base text-foreground placeholder-subtle outline-none disabled:opacity-50"
         />
 
         {/* Location button */}
@@ -60,8 +60,8 @@ export function SearchBar({ onSearch, isSearching }: SearchBarProps) {
           title={hasLocation ? `${lat?.toFixed(4)}, ${lng?.toFixed(4)}` : 'Use my location'}
           className={`p-2 mr-1 rounded-lg transition-colors disabled:opacity-40 ${
             hasLocation
-              ? 'text-amber-400 hover:bg-amber-500/10'
-              : 'text-white/40 hover:text-white/70 hover:bg-white/5'
+              ? 'text-accent hover:bg-accent/10'
+              : 'text-subtle hover:text-muted hover:bg-border'
           }`}
         >
           {geoLoading ? (
@@ -79,23 +79,41 @@ export function SearchBar({ onSearch, isSearching }: SearchBarProps) {
           )}
         </button>
 
-        {/* Search button */}
+        {/* Submit button with icon morph */}
         <button
           type="button"
           onClick={handleSubmit}
           disabled={isSearching || !query.trim()}
-          className="mr-2 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 disabled:bg-white/10 disabled:text-white/30 text-black text-sm font-medium rounded-lg transition-colors flex items-center gap-1.5"
+          className="mr-2 px-3 py-1.5 bg-accent hover:bg-accent/90 disabled:bg-border disabled:text-subtle text-accent-foreground text-sm font-medium rounded-lg transition-colors flex items-center gap-1.5"
         >
-          {isSearching ? (
-            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-            </svg>
-          ) : (
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-            </svg>
-          )}
+          <AnimatePresence mode="wait" initial={false}>
+            {isSearching ? (
+              <motion.span
+                key="spinner"
+                initial={{ scale: 0.5, rotate: 45, opacity: 0 }}
+                animate={{ scale: 1, rotate: 0, opacity: 1 }}
+                exit={{ scale: 0.5, opacity: 0 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 20 }}
+              >
+                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+              </motion.span>
+            ) : (
+              <motion.span
+                key="arrow"
+                initial={{ scale: 0.5, rotate: -45, opacity: 0 }}
+                animate={{ scale: 1, rotate: 0, opacity: 1 }}
+                exit={{ scale: 0.5, rotate: -45, opacity: 0 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 20 }}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                </svg>
+              </motion.span>
+            )}
+          </AnimatePresence>
         </button>
       </div>
 
@@ -106,7 +124,7 @@ export function SearchBar({ onSearch, isSearching }: SearchBarProps) {
             key={chip}
             type="button"
             onClick={() => handleChip(chip)}
-            className="text-xs bg-white/5 hover:bg-white/10 text-white/50 hover:text-white/80 rounded-full px-3 py-1 transition-colors cursor-pointer"
+            className="text-xs bg-border/60 hover:bg-border text-muted hover:text-foreground rounded-full px-3 py-1 transition-colors cursor-pointer"
           >
             {chip}
           </button>
