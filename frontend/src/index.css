@@ -2,27 +2,97 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Semantic token set — RGB channel triples for Tailwind slash-opacity ── */
 :root {
-  --accent: #f59e0b;
+  /* Light palette — warm stone base */
+  --background: 250 249 247;
+  --background-subtle: 245 244 242;
+  --background-raised: 231 229 226;
+  --card: 255 255 255;
+  --foreground: 28 25 23;
+  --foreground-muted: 87 83 78;
+  --foreground-subtle: 168 162 158;
+  --border: 214 211 209;
+  --border-strong: 168 162 158;
+
+  /* Shared tokens */
+  --accent: 245 158 11;
+  --accent-foreground: 0 0 0;
+  --success: 22 163 74;
+  --success-bg: 240 253 244;
+  --warning: 217 119 6;
+  --warning-bg: 255 251 235;
+  --danger: 220 38 38;
+  --danger-bg: 254 242 242;
+  --neutral: 120 113 108;
+  --neutral-bg: 245 244 242;
+
+  color-scheme: light;
+}
+
+.dark {
+  /* Dark palette — slightly warm black */
+  --background: 10 9 7;
+  --background-subtle: 17 16 14;
+  --background-raised: 26 25 23;
+  --card: 26 25 23;
+  --foreground: 229 229 229;
+  --foreground-muted: 163 163 163;
+  --foreground-subtle: 82 82 82;
+  --border: 38 37 35;
+  --border-strong: 64 63 61;
+
+  /* Dark mode semantic overrides */
+  --success: 74 222 128;
+  --success-bg: 20 83 45;
+  --warning: 251 191 36;
+  --warning-bg: 66 32 6;
+  --danger: 248 113 113;
+  --danger-bg: 69 10 10;
+  --neutral: 115 115 115;
+  --neutral-bg: 38 37 35;
+
   color-scheme: dark;
 }
 
-* {
+/* ── Smooth theme transitions (bg and border only — not text) ── */
+*, *::before, *::after {
   box-sizing: border-box;
+  transition: background-color 0.25s ease, border-color 0.25s ease;
 }
 
 body {
-  background-color: #0a0a0a;
-  color: #e5e5e5;
-  font-family: 'DM Sans', system-ui, sans-serif;
+  background-color: rgb(var(--background));
+  color: rgb(var(--foreground));
+  font-family: 'Geist', 'DM Sans', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
-::selection {
-  background: #f59e0b33;
-  color: #f59e0b;
+/* ── Mesh gradient ambient warmth (dark mode only) ── */
+.dark body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(ellipse 60% 50% at 10% 20%, rgba(245, 158, 11, 0.04) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 40% at 90% 80%, rgba(239, 68, 68, 0.025) 0%, transparent 60%);
 }
 
+/* Ensure content sits above the mesh gradient */
+#root {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Selection ── */
+::selection {
+  background: rgba(245, 158, 11, 0.2);
+  color: rgb(245, 158, 11);
+}
+
+/* ── Cursor blink for agent terminal ── */
 @keyframes blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0; }
@@ -30,4 +100,10 @@ body {
 
 .cursor-blink {
   animation: blink 1s step-end infinite;
+  text-shadow: 0 0 10px rgba(134, 239, 172, 0.7);
+}
+
+/* ── Tabular numbers utility ── */
+.tabular {
+  font-variant-numeric: tabular-nums;
 }
