@@ -30,6 +30,8 @@ export interface RankedRecommendation {
   google_rating?: number;
   standout_quote?: string | null;
   score?: number;
+  lat?: number;
+  lng?: number;
 }
 
 export interface SearchResult {
