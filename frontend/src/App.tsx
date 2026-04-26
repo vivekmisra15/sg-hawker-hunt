@@ -7,7 +7,7 @@ import { ThemeToggle } from './components/ThemeToggle';
 import { HawkerMap } from './components/HawkerMap';
 
 function App() {
-  const { state, traces, results, search, reset } = useSSE();
+  const { state, traces, results, error, search, reset } = useSSE();
   const isActive = state !== 'idle';
   const showMap = state === 'complete' && results.length > 0;
 
@@ -37,6 +37,20 @@ function App() {
           onSearch={search}
           isSearching={state === 'searching'}
         />
+
+        {/* Error state */}
+        <AnimatePresence>
+          {state === 'error' && error && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              className="mt-4 px-4 py-3 bg-danger-bg border border-danger/30 rounded-xl text-sm text-danger"
+            >
+              <span className="font-medium">Search failed:</span> {error}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Content area */}
         <AnimatePresence>
