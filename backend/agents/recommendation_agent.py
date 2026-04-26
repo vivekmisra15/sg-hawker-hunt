@@ -1,6 +1,6 @@
 """
 RecommendationAgent — RAG-based stall ranking with hygiene, Michelin, and halal signals.
-Single responsibility: query + location + hygiene → list[RankedRecommendation] (top 3).
+Single responsibility: query + location + hygiene → list[RankedRecommendation] (top 10).
 
 Scoring weights:
   Hygiene Grade A: +3  |  B: +2  |  C: +1  |  UNKNOWN/D: 0
@@ -418,7 +418,7 @@ class RecommendationAgent:
 
     async def _analyse_sentiment(self, reviews_summary: str) -> SentimentResult:
         """Call claude-haiku-4-5 to extract sentiment from review text. Cached 24h."""
-        cache_key = hashlib.sha256(reviews_summary[:500].encode()).hexdigest()
+        cache_key = hashlib.sha256(reviews_summary.encode()).hexdigest()
         cached = _SENTIMENT_CACHE.get(cache_key)
         if cached is not None:
             result, ts = cached
