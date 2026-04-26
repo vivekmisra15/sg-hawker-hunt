@@ -787,3 +787,197 @@ Fixed: `crowd_note = ""` when `is_open is False`. Only shown when open AND crowd
 
 ---
 
+## Session Notes — Milestone 6 (2026-04-25)
+
+### Design vision: "Premium Hawker Terminal"
+
+Three reference products drove every pixel decision:
+
+| Influence | Pattern adopted |
+|---|---|
+| Perplexity | Agent panel as 280px left sidebar; results canvas on the right |
+| Linear | 1px borders at 15% opacity, opacity-based text hierarchy, tabular numbers everywhere |
+| Raycast | Glass morphism only on elevated surfaces (search bar, map popup) |
+| Warp Terminal | Block-based agent trace with named sections and typewriter character reveal |
+| Luma | Mesh gradient ambient warmth — amber 4% + Singapore red 2.5% in dark mode |
+| Vercel | Geist font, pixel-grid alignment |
+
+### Token foundation
+
+- `frontend/src/index.css`: full CSS custom property set as **RGB channel triples** — enables Tailwind slash-opacity (`bg-background/50`)
+- Light palette: warm stone (`#faf9f7`); dark palette: warm black (`#0a0907`) — neither is a pure neutral
+- Semantic roles: `--background`, `--card`, `--foreground`, `--border`, `--accent`, `--success/warning/danger/neutral` (each with a `-bg` variant)
+- Theme transitions: `background-color` and `border-color` only (not `color` — avoids readability flash)
+- `frontend/tailwind.config.ts`: `darkMode: 'class'`, full token map, Geist font family
+- `frontend/src/lib/utils.ts` (NEW): `cn()` utility wrapping `clsx` + `tailwind-merge`
+- `frontend/src/vite-env.d.ts` (NEW): `/// <reference types="vite/client" />` for `import.meta.env`
+
+### Theme system
+
+- `frontend/src/context/ThemeContext.tsx` (NEW): reads `localStorage` → `prefers-color-scheme` → default dark; applies/removes `.dark` on `document.documentElement`
+- `frontend/src/components/ThemeToggle.tsx` (NEW): animated sun/moon icon swap via `AnimatePresence mode="wait"` with spring transition
+- `frontend/src/main.tsx`: `<ThemeProvider>` wrapper added
+
+### Layout restructure (Perplexity-inspired)
+
+`App.tsx` restructured to a three-panel layout when search is active:
+1. **Agent sidebar** — `w-64 shrink-0 sticky top-8` on desktop
+2. **Results column** — `flex-1 min-w-0`
+3. **Map column** — `w-80 xl:w-96 shrink-0 sticky top-8`
+
+All three panels animate in with staggered springs. Idle state stays single-column. Mobile: vertical stack.
+
+### Component redesigns
+
+- **AgentPanel**: Warp-style named blocks (ORCHESTRATOR / LOCATION / HYGIENE / RECOMMENDATION), each with a 1px separator; `TypewriterText` sub-component reveals newest line character by character at 18ms/char
+- **ResultCard**: spring entrance `y:16, scale:0.96`; `whileHover: y:-2, scale:1.01`; SVG star ratings replace ★/☆ text; `tabular-nums` on all numbers
+- **ResultsList**: animated `motion.path` SVG underline on "Top picks" label
+- **SearchBar**: glass morphism input; arrow ↔ spinner morph on submit via `AnimatePresence mode="wait"`
+- **StatusBadge**: semantic success/warning/danger/neutral tokens; Michelin badge gains amber text-shadow glow
+
+### Map feature (initial — Mapbox)
+
+Initial implementation used `react-map-gl` + `mapbox-gl`. Three new components:
+- `HawkerMap.tsx`: token guard (`VITE_MAPBOX_TOKEN` required), `fitBounds`, theme-aware style switching
+- `MapMarker.tsx`: amber rank pin with spring drop entrance and selected pulse animation
+- `MapDetailPanel.tsx`: glassmorphic Raycast-style popup with spring entrance/exit, closes on Escape/outside-click
+
+**Note:** this Mapbox implementation was replaced in the following session — see Milestone 6 Refactor below.
+
+### Test results — Milestone 6
+- 68/68 backend tests passing (no backend changes this milestone)
+- Frontend build: zero TypeScript errors, 295 KB JS + 1.77 MB mapbox-gl bundle
+
+---
+
+## Session Notes — Milestone 6 Refactor (2026-04-26)
+
+### Seven issues addressed from live testing
+
+| # | Symptom | Root cause | Fix |
+|---|---------|------------|-----|
+| 1 | Green agent text invisible in light mode | `text-green-300/70` hardcoded, too light on stone | `dark:text-green-300/70 text-emerald-800/70` |
+| 2 | Signal data (ratings, crowd) missing from most cards | `review_count` and `crowd_level` not included in `RankedRecommendation` output | Added both fields to schema and agent output |
+| 3 | Hygiene grades UNKNOWN on most stalls | Static SFA file uses long names ("Clementi Ave 3 Blk 448") that substring-match fails for short names ("Clementi 448 Market & Food Centre") | Jaccard token-similarity fallback at threshold 0.4 |
+| 4 | Only 5 results, no way to get more | Backend capped at 5; no frontend pagination | Backend → 10; frontend IntersectionObserver reveals 5 at a time |
+| 5 | Cards not clickable | No `onClick` on `ResultCard` | Click opens Google Maps search for stall in new tab |
+| 6 & 7 | No map / blank right panel | `HawkerMap` returned `null` without `VITE_MAPBOX_TOKEN`; `lat`/`lng` not in output | Replaced Mapbox with Leaflet + CartoDB (no token); wired coordinates through |
+
+### Backend changes
+
+**`backend/models/schemas.py`** — `RankedRecommendation` gains four new fields:
+- `review_count: Optional[int]`
+- `crowd_level: str = "unknown"`
+- `lat: Optional[float]`
+- `lng: Optional[float]`
+
+**`backend/agents/recommendation_agent.py`**:
+- Populates all four new fields from `LocationResult` at candidate construction
+- RAG fetch: `n_results=10` → `n_results=15`
+- Result cap: `candidates[:5]` → `candidates[:10]`
+
+**`backend/tools/nea_client.py`** — `get_static_hygiene_for_centre()` now has a three-tier match:
+1. Exact match (unchanged)
+2. Substring in either direction (unchanged)
+3. **New:** Jaccard token similarity ≥ 0.4, ignoring noise words (BLK, AVE, MARKET, FOOD, CENTRE, etc.)
+
+This recovers grades for centres whose short display name ("Clementi 448") shares key tokens with the SFA file's long name ("Clementi Ave 3 Blk 448") but has no substring overlap.
+
+### Frontend changes
+
+**`AgentPanel.tsx`**: terminal text changed from hardcoded `text-green-300/70` to `dark:text-green-300/70 text-emerald-800/70` — readable in both modes.
+
+**`ResultCard.tsx`**:
+- `onClick` opens `https://www.google.com/maps/search/?api=1&query=STALL+CENTRE+Singapore` in a new tab
+- "Maps ↗" hint appears bottom-right on hover (`group-hover:opacity-100`)
+- Review count displayed alongside rating: `4.4 ★ (23,090)`
+- Crowd badge shown when `crowd_level` is "busy" or "quiet" and stall is open
+
+**`ResultsList.tsx`** — infinite scroll via `IntersectionObserver`:
+- `visibleCount` state starts at 5, resets on new results
+- Sentinel `<div>` below visible cards triggers `+5` reveal when it enters viewport
+- "X of Y results" counter in top-right of section header
+
+**`HawkerMap.tsx`** — complete rewrite replacing Mapbox with Leaflet:
+- `react-map-gl` / `mapbox-gl` / `@types/mapbox-gl` removed (bundle: 2 MB → 430 KB)
+- `react-leaflet@4` + `leaflet` + `@types/leaflet` added (React 18 compatible)
+- Tiles: CartoDB Positron (light) / CartoDB DarkMatter (dark) — free, no token
+- Markers: `L.divIcon` with inline SVG amber circles — same visual design as before
+- Popups: Leaflet `<Popup>` replaces the custom `MapDetailPanel` component
+- Map always renders when results have coordinates — no token guard
+- `MapMarker.tsx` and `MapDetailPanel.tsx` deleted
+
+**`App.tsx`**: map token guard removed; mobile map rendered below results via a separate `<HawkerMap>` instance inside a fixed-height `div`.
+
+### Known issue — Leaflet default icon missing
+Leaflet's default marker icons rely on `marker-icon.png` bundled with the package. Since we use custom `divIcon` markers exclusively, no fix needed — default icons never appear.
+
+### Test results — Milestone 6 Refactor
+- 69/69 backend tests passing (+1 new test: `test_result_carries_location_signals`)
+- Frontend build: zero TypeScript errors, 430 KB JS bundle (no mapbox-gl)
+- `test_returns_maximum_ten_results` replaces `test_returns_maximum_five_results`
+
+---
+
+## Session Notes — RQA Run 01 (2026-04-26)
+
+### What is RQA?
+
+Recursive Quality Agent: an autonomous improvement loop run via `.claude/agents/rqa.md`.
+Each run executes 3 cycles of CRITIQUE → PRIORITISE → EXECUTE → VERIFY → REFLECT.
+Each cycle selects 3 improvements scored by Impact × Feasibility × Breadth (≥1 user-facing, ≥1 backend).
+
+### Cycle 1 — Foundations
+
+**C1-1: Error boundary + error state UI**
+- Created `frontend/src/components/ErrorBoundary.tsx` — catches render crashes, shows retry
+- Wired into `main.tsx`; error banner added to `App.tsx` using `error` from `useSSE`
+- Previously: unhandled throw → white screen; SSE errors silently swallowed
+
+**C1-2: IntersectionObserver dependency fix**
+- `ResultsList.tsx`: removed `visibleCount` from `useEffect` deps, used `totalRef` (ref) instead
+- Observer now created once per result set, not re-created on every scroll trigger
+- Sentinel div always mounted for stable observer target
+
+**C1-3: Jaccard similarity tests + docstring fix**
+- 5 new tests in `test_nea_client.py` covering exact, fuzzy, different, empty, and real-world matches
+- Fixed stale docstring in `recommendation_agent.py`: "top 3" → "top 10"
+
+### Cycle 2 — Accessibility + Cache Correctness
+
+**C2-1: prefers-reduced-motion**
+- `@media (prefers-reduced-motion: reduce)` in `index.css` — collapses all animation/transition durations globally
+
+**C2-2: ResultCard keyboard accessibility**
+- `tabIndex={0}`, `role="link"`, `aria-label`, `onKeyDown` (Enter/Space)
+- `focus-visible:ring-2` focus ring; "Maps ↗" always partially visible (opacity-50)
+
+**C2-3: Sentiment cache key collision fix**
+- `recommendation_agent.py`: `sha256(reviews[:500])` → `sha256(reviews)` — full text hash
+
+### Cycle 3 — Screen Readers, Map Performance, RAG Tests
+
+**C3-1: AgentPanel aria-live**
+- `role="log"`, `aria-live="polite"`, `aria-label` on trace container
+
+**C3-2: HawkerMap marker diffing**
+- Replaced clear-all-and-recreate with `Map<string, L.Marker>` ref-based diffing
+- Stale markers removed, existing updated in-place, new ones added — eliminates DOM thrash
+
+**C3-3: vector_store.py tests**
+- 9 new tests in `test_vector_store.py`: empty query, add+query, semantic ordering, n_results cap, upsert, metadata conversion
+
+### Test results — RQA Run 01
+- 83/83 passing (+14 from pre-RQA baseline of 69)
+- Frontend build: zero TypeScript errors, 433 KB JS bundle
+- Zero regressions across all 3 cycles
+
+### Carry-forward to RQA Run 02
+- ResultCard not memoized (React.memo)
+- Double static hygiene fetch in hygiene_agent
+- No concurrent request / rate limiting tests
+- No end-to-end integration test
+- TypewriterText Framer Motion inline styles may bypass CSS reduced-motion
+
+---
+
