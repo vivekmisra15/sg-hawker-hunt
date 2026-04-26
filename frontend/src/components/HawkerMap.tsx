@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { RankedRecommendation } from '../types';
@@ -42,11 +42,16 @@ function makeMarkerIcon(rank: number): L.DivIcon {
   });
 }
 
+function markerKey(rec: RankedRecommendation): string {
+  return `${rec.stall_name}::${rec.centre_name}`;
+}
+
 export function HawkerMap({ recommendations }: HawkerMapProps) {
   const { theme } = useTheme();
   const mapRef = useRef<L.Map | null>(null);
   const tileRef = useRef<L.TileLayer | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const markersRef = useRef<Map<string, L.Marker>>(new Map());
 
   const mapped = withCoords(recommendations);
 
@@ -87,63 +92,82 @@ export function HawkerMap({ recommendations }: HawkerMapProps) {
     tileRef.current = newTile;
   }, [theme]);
 
-  // Add/update markers whenever recommendations change
+  // Build popup HTML for a recommendation
+  const buildPopup = useCallback((rec: RankedRecommendation) => {
+    const ratingHtml = rec.google_rating != null
+      ? `<span style="color:#f59e0b">★</span> ${rec.google_rating.toFixed(1)}${rec.review_count ? ` <span style="opacity:.6">(${rec.review_count.toLocaleString()})</span>` : ''}`
+      : '';
+
+    const gradeColor: Record<string, string> = {
+      A: '#16a34a', B: '#d97706', C: '#dc2626', D: '#dc2626',
+    };
+    const gradeHtml = rec.hygiene_grade !== 'UNKNOWN'
+      ? `<span style="color:${gradeColor[rec.hygiene_grade] ?? '#737373'}">Grade ${rec.hygiene_grade}</span>`
+      : '';
+
+    const distHtml = rec.distance_km < 99
+      ? `${rec.distance_km.toFixed(1)} km away`
+      : '';
+
+    const meta = [gradeHtml, ratingHtml, distHtml].filter(Boolean).join(' &nbsp;·&nbsp; ');
+
+    return `
+      <div style="font-family:Geist,DM Sans,system-ui,sans-serif;min-width:200px;max-width:240px">
+        <div style="font-weight:600;font-size:14px;margin-bottom:2px">${rec.stall_name}</div>
+        <div style="font-size:12px;opacity:.65;margin-bottom:6px">${rec.centre_name}</div>
+        ${meta ? `<div style="font-size:11px;margin-bottom:8px">${meta}</div>` : ''}
+        <a href="${mapsUrl(rec.stall_name, rec.centre_name)}" target="_blank" rel="noopener noreferrer"
+          style="font-size:12px;color:#f59e0b;text-decoration:none;font-weight:500">
+          View on Google Maps ↗
+        </a>
+      </div>
+    `;
+  }, []);
+
+  // Diff markers: add new, remove stale, update changed
   useEffect(() => {
     if (!mapRef.current) return;
     const map = mapRef.current;
+    const prevMarkers = markersRef.current;
+    const nextKeys = new Set(mapped.map(markerKey));
 
-    // Clear existing markers (except tile layer)
-    map.eachLayer(layer => {
-      if (layer instanceof L.Marker) map.removeLayer(layer);
-    });
+    // Remove markers no longer in results
+    for (const [key, marker] of prevMarkers) {
+      if (!nextKeys.has(key)) {
+        map.removeLayer(marker);
+        prevMarkers.delete(key);
+      }
+    }
 
     if (mapped.length === 0) return;
 
     const bounds: [number, number][] = [];
 
-    mapped.forEach(rec => {
+    for (const rec of mapped) {
+      const key = markerKey(rec);
       const lat = rec.lat!;
       const lng = rec.lng!;
       bounds.push([lat, lng]);
 
-      const marker = L.marker([lat, lng], { icon: makeMarkerIcon(rec.rank) });
-
-      const ratingHtml = rec.google_rating != null
-        ? `<span style="color:#f59e0b">★</span> ${rec.google_rating.toFixed(1)}${rec.review_count ? ` <span style="opacity:.6">(${rec.review_count.toLocaleString()})</span>` : ''}`
-        : '';
-
-      const gradeColor: Record<string, string> = {
-        A: '#16a34a', B: '#d97706', C: '#dc2626', D: '#dc2626',
-      };
-      const gradeHtml = rec.hygiene_grade !== 'UNKNOWN'
-        ? `<span style="color:${gradeColor[rec.hygiene_grade] ?? '#737373'}">Grade ${rec.hygiene_grade}</span>`
-        : '';
-
-      const distHtml = rec.distance_km < 99
-        ? `${rec.distance_km.toFixed(1)} km away`
-        : '';
-
-      const meta = [gradeHtml, ratingHtml, distHtml].filter(Boolean).join(' &nbsp;·&nbsp; ');
-
-      marker.bindPopup(`
-        <div style="font-family:Geist,DM Sans,system-ui,sans-serif;min-width:200px;max-width:240px">
-          <div style="font-weight:600;font-size:14px;margin-bottom:2px">${rec.stall_name}</div>
-          <div style="font-size:12px;opacity:.65;margin-bottom:6px">${rec.centre_name}</div>
-          ${meta ? `<div style="font-size:11px;margin-bottom:8px">${meta}</div>` : ''}
-          <a href="${mapsUrl(rec.stall_name, rec.centre_name)}" target="_blank" rel="noopener noreferrer"
-            style="font-size:12px;color:#f59e0b;text-decoration:none;font-weight:500">
-            View on Google Maps ↗
-          </a>
-        </div>
-      `, { maxWidth: 260 });
-
-      marker.addTo(map);
-    });
+      const existing = prevMarkers.get(key);
+      if (existing) {
+        // Update position and popup if marker already exists
+        existing.setLatLng([lat, lng]);
+        existing.setIcon(makeMarkerIcon(rec.rank));
+        existing.setPopupContent(buildPopup(rec));
+      } else {
+        // Create new marker
+        const marker = L.marker([lat, lng], { icon: makeMarkerIcon(rec.rank) });
+        marker.bindPopup(buildPopup(rec), { maxWidth: 260 });
+        marker.addTo(map);
+        prevMarkers.set(key, marker);
+      }
+    }
 
     if (bounds.length > 0) {
       map.fitBounds(bounds, { padding: [48, 48], maxZoom: 15 });
     }
-  }, [recommendations]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [recommendations, buildPopup]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (mapped.length === 0) return null;
 
