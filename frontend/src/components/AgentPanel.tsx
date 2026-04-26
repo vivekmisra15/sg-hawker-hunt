@@ -85,6 +85,9 @@ export function AgentPanel({ traces, state }: AgentPanelProps) {
 
       <div
         ref={scrollRef}
+        role="log"
+        aria-live="polite"
+        aria-label="Agent reasoning trace"
         className="h-48 md:h-56 overflow-y-auto scroll-smooth"
       >
         {state === 'idle' && (
