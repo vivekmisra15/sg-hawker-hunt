@@ -45,11 +45,20 @@ function StarRating({ rating }: { rating: number }) {
 }
 
 export function ResultCard({ recommendation: r, index }: ResultCardProps) {
+  const url = mapsUrl(r.stall_name, r.centre_name);
+
   function handleClick(e: React.MouseEvent) {
     // Don't fire if user selects text
     if (window.getSelection()?.toString()) return;
     e.preventDefault();
-    window.open(mapsUrl(r.stall_name, r.centre_name), '_blank', 'noopener,noreferrer');
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
   }
 
   return (
@@ -59,15 +68,19 @@ export function ResultCard({ recommendation: r, index }: ResultCardProps) {
       transition={{ type: 'spring', stiffness: 300, damping: 30, delay: index * 0.07 }}
       whileHover={{ y: -2, scale: 1.01, transition: { type: 'spring', stiffness: 400, damping: 25 } }}
       onClick={handleClick}
-      className="group relative bg-card rounded-xl border border-border hover:border-border-strong transition-colors p-5 cursor-pointer"
+      onKeyDown={handleKeyDown}
+      tabIndex={0}
+      role="link"
+      aria-label={`${r.stall_name} at ${r.centre_name} — open in Google Maps`}
+      className="group relative bg-card rounded-xl border border-border hover:border-border-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:border-accent/60 transition-colors p-5 cursor-pointer"
     >
       {/* Rank — barely visible watermark */}
       <span className="absolute top-4 right-5 text-5xl font-bold text-foreground/[0.06] leading-none select-none tabular">
         {r.rank}
       </span>
 
-      {/* Maps link hint — appears on hover */}
-      <span className="absolute bottom-4 right-5 text-xs text-subtle opacity-0 group-hover:opacity-100 transition-opacity">
+      {/* Maps link hint — subtle always, stronger on hover/focus */}
+      <span className="absolute bottom-4 right-5 text-xs text-subtle opacity-50 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
         Maps ↗
       </span>
 
