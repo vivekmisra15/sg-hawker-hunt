@@ -12,6 +12,8 @@ interface ResultsListProps {
 export function ResultsList({ recommendations, state }: ResultsListProps) {
   const [visibleCount, setVisibleCount] = useState(5);
   const sentinelRef = useRef<HTMLDivElement>(null);
+  const totalRef = useRef(recommendations.length);
+  totalRef.current = recommendations.length;
 
   // Reset when new results come in
   useEffect(() => {
@@ -19,22 +21,22 @@ export function ResultsList({ recommendations, state }: ResultsListProps) {
   }, [recommendations]);
 
   // IntersectionObserver: reveal 5 more when sentinel enters viewport
+  // Uses totalRef to avoid re-creating observer on every visibleCount change
   useEffect(() => {
-    if (visibleCount >= recommendations.length) return;
     const sentinel = sentinelRef.current;
     if (!sentinel) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) {
-          setVisibleCount(c => Math.min(c + 5, recommendations.length));
+          setVisibleCount(c => Math.min(c + 5, totalRef.current));
         }
       },
       { threshold: 0.1 }
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [visibleCount, recommendations.length]);
+  }, [recommendations]);
 
   if (state !== 'complete') return null;
 
@@ -85,12 +87,10 @@ export function ResultsList({ recommendations, state }: ResultsListProps) {
         ))}
       </AnimatePresence>
 
-      {/* Sentinel div — triggers infinite scroll */}
-      {hasMore && (
-        <div ref={sentinelRef} className="py-4 text-center">
-          <span className="text-xs text-subtle">↓ scroll for more</span>
-        </div>
-      )}
+      {/* Sentinel div — always mounted so observer can attach; text hidden when no more */}
+      <div ref={sentinelRef} className="py-4 text-center">
+        {hasMore && <span className="text-xs text-subtle">↓ scroll for more</span>}
+      </div>
     </div>
   );
 }
