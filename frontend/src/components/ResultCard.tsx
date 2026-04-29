@@ -1,3 +1,4 @@
+import { useId, memo } from 'react';
 import { motion } from 'framer-motion';
 import { RankedRecommendation } from '../types';
 import { StatusBadge } from './StatusBadge';
@@ -14,6 +15,7 @@ function mapsUrl(stallName: string, centreName: string) {
 }
 
 function StarRating({ rating }: { rating: number }) {
+  const clipId = useId();
   const full = Math.floor(rating);
   const hasHalf = rating - full >= 0.5;
   const empty = 5 - full - (hasHalf ? 1 : 0);
@@ -27,12 +29,12 @@ function StarRating({ rating }: { rating: number }) {
       {hasHalf && (
         <svg className="w-3 h-3" viewBox="0 0 24 24">
           <defs>
-            <clipPath id="half">
+            <clipPath id={clipId}>
               <rect x="0" y="0" width="12" height="24" />
             </clipPath>
           </defs>
           <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" fill="rgb(var(--foreground-subtle))" />
-          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" fill="currentColor" clipPath="url(#half)" className="text-accent" />
+          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" fill="currentColor" clipPath={`url(#${clipId})`} className="text-accent" />
         </svg>
       )}
       {Array.from({ length: empty }).map((_, i) => (
@@ -44,7 +46,7 @@ function StarRating({ rating }: { rating: number }) {
   );
 }
 
-export function ResultCard({ recommendation: r, index }: ResultCardProps) {
+export const ResultCard = memo(function ResultCard({ recommendation: r, index }: ResultCardProps) {
   const url = mapsUrl(r.stall_name, r.centre_name);
 
   function handleClick(e: React.MouseEvent) {
@@ -133,4 +135,4 @@ export function ResultCard({ recommendation: r, index }: ResultCardProps) {
       </p>
     </motion.div>
   );
-}
+});

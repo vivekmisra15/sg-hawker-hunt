@@ -981,3 +981,66 @@ Each cycle selects 3 improvements scored by Impact × Feasibility × Breadth (�
 
 ---
 
+## Session Notes — RQA Run 02 (2026-04-29)
+
+### Cycle 1 — Reduced Motion, Double Fetch, Cache Eviction
+
+**C1-1: TypewriterText respects prefers-reduced-motion**
+- Added `usePrefersReducedMotion()` hook to `AgentPanel.tsx` using `window.matchMedia`
+- When reduced motion is preferred, TypewriterText renders plain text with zero Framer Motion overhead
+- Closes the last animation escape hatch from the CSS-only approach in RQA-01
+
+**C1-2: Eliminate double static hygiene fetch**
+- `hygiene_agent.py`: declared `static_stalls` before the if/else block, reused from first fetch
+- Previously called `get_static_hygiene_for_centre()` twice per centre when using static data
+- New test asserts exactly 1 call per centre
+
+**C1-3: Bound sentiment cache with LRU eviction**
+- `_SENTIMENT_CACHE_MAX_SIZE = 500` added to `recommendation_agent.py`
+- After each new entry, oldest entries evicted by timestamp if size exceeds max
+- Prevents unbounded memory growth in long-running processes
+
+### Cycle 2 — SearchBar A11y, SVG Id Collision, Orchestrator Error Tests
+
+**C2-1: SearchBar accessibility**
+- `<input>`: `aria-label="Search for hawker food in Singapore"`
+- Location button: dynamic `aria-label` for loading/acquired/default states
+- Submit button: `aria-label` toggling between "Searching..." and "Search"
+
+**C2-2: Fix StarRating shared clipPath id**
+- Replaced static `id="half"` with `useId()` hook for unique per-instance ids
+- Fixes rendering bugs when multiple cards have half-star ratings
+
+**C2-3: Orchestrator error-wrapper tests**
+- `test_outer_run_catches_unexpected_exception_and_yields_error`: RuntimeError from sub-agent caught
+- `test_outer_run_catches_query_parse_crash`: Anthropic API crash falls back to defaults
+
+### Cycle 3 — React.memo, Display Bug Fix, SSE Integration Test
+
+**C3-1: Memoize ResultCard with React.memo**
+- `ResultCard` wrapped in `memo()` — avoids re-renders during search phase when results are unchanged
+- Carry-forward item from RQA-01 resolved
+
+**C3-2: Fix visibleCount display in ResultsList**
+- Counter now shows `Math.min(visibleCount, total)` instead of raw `visibleCount`
+- Previously displayed "10 of 8" when observer triggered with fewer results
+
+**C3-3: SSE endpoint integration test**
+- Created `backend/tests/test_sse_endpoint.py` with 3 tests using FastAPI TestClient
+- Covers: full SSE event flow, request validation (422), health endpoint
+- First integration test in the codebase — catches routing and serialization issues
+
+### Test results — RQA Run 02
+- 90/90 passing (+7 from pre-RQA-02 baseline of 83)
+- Frontend build: zero TypeScript errors, 433 KB JS bundle
+- Zero regressions across all 3 cycles
+
+### Carry-forward to RQA Run 03
+- `_load_json_list` called per-request instead of cached at module level
+- Header "Hawker Hunt" button lacks `role="button"` and `aria-label`
+- Orchestrator creates new `OneMapClient()` per geocode instead of reusing injected one
+- No rate-limiting or concurrent request protection tests
+- Recommendation agent docstring still says "top 3" (line 208)
+
+---
+

@@ -122,3 +122,29 @@ async def test_reasoning_trace_is_non_empty_string():
     assert isinstance(results[0].reasoning_trace, str)
     assert len(results[0].reasoning_trace) > 0
     assert "Maxwell Food Centre" in results[0].reasoning_trace
+
+
+@pytest.mark.asyncio
+async def test_static_fallback_calls_get_static_only_once():
+    """When live API returns no match, get_static_hygiene_for_centre should be
+    called exactly once per centre — not a second time for the trace string."""
+    static_stalls = [
+        HygieneResult(
+            stall_name="STALL A",
+            centre_name="Test Centre",
+            grade="A",
+            demerit_points=0,
+            suspended=False,
+        ),
+    ]
+    mock_nea = _make_mock_nea(
+        grades={},
+        closures=[],
+        static_stalls=static_stalls,
+    )
+    agent = HygieneAgent(nea_client=mock_nea)
+    results = await agent.run(["Test Centre"])
+    assert results[0].grade == "A"
+    assert "SFA data" in results[0].reasoning_trace
+    # The critical assertion: static fetch called exactly once, not twice
+    assert mock_nea.get_static_hygiene_for_centre.call_count == 1

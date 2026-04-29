@@ -51,6 +51,8 @@ class HygieneAgent:
                 or r.centre_name.upper() in centre_upper
             ]
 
+            static_stalls: list[HygieneResult] = []
+
             if matching:
                 grade = _best_grade([r.grade for r in matching])
                 demerit = min(r.demerit_points for r in matching)
@@ -74,8 +76,8 @@ class HygieneAgent:
                     data_source = "none"
 
             # Build enhanced reasoning trace
+            # Reuse static_stalls from above — no second fetch needed
             if data_source == "static":
-                static_stalls = self._nea.get_static_hygiene_for_centre(centre_name)
                 total = len(static_stalls)
                 grade_a_count = sum(1 for s in static_stalls if s.grade == "A")
                 grade_summary = f"{grade_a_count}/{total} stalls Grade A" if total > 0 else f"Grade {grade}"

@@ -42,6 +42,7 @@ _DIETARY_REQUIRES_VEGETARIAN = {"vegetarian", "vegan", "veggie"}
 
 _SENTIMENT_CACHE: dict[str, tuple[SentimentResult, float]] = {}
 _SENTIMENT_CACHE_TTL = 86400  # 24 hours
+_SENTIMENT_CACHE_MAX_SIZE = 500  # evict oldest entries above this limit
 
 # Google Places priceLevel → proxy upper price bound (SGD)
 _PRICE_LEVEL_MAP: dict[str, float] = {
@@ -454,4 +455,14 @@ class RecommendationAgent:
             result = _NEUTRAL_SENTIMENT
 
         _SENTIMENT_CACHE[cache_key] = (result, time.time())
+
+        # Evict oldest entries if cache exceeds max size
+        if len(_SENTIMENT_CACHE) > _SENTIMENT_CACHE_MAX_SIZE:
+            # Sort by timestamp (second element of tuple), remove oldest
+            sorted_keys = sorted(
+                _SENTIMENT_CACHE, key=lambda k: _SENTIMENT_CACHE[k][1]
+            )
+            for old_key in sorted_keys[: len(_SENTIMENT_CACHE) - _SENTIMENT_CACHE_MAX_SIZE]:
+                del _SENTIMENT_CACHE[old_key]
+
         return result

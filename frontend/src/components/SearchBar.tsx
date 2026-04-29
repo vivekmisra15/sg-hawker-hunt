@@ -49,6 +49,7 @@ export function SearchBar({ onSearch, isSearching }: SearchBarProps) {
           onKeyDown={handleKeyDown}
           disabled={isSearching}
           placeholder="Find hawker food... try 'laksa near Toa Payoh' or 'vegetarian Maxwell'"
+          aria-label="Search for hawker food in Singapore"
           className="flex-1 bg-transparent px-4 py-3 text-base text-foreground placeholder-subtle outline-none disabled:opacity-50"
         />
 
@@ -58,6 +59,13 @@ export function SearchBar({ onSearch, isSearching }: SearchBarProps) {
           onClick={requestGeo}
           disabled={isSearching}
           title={hasLocation ? `${lat?.toFixed(4)}, ${lng?.toFixed(4)}` : 'Use my location'}
+          aria-label={
+            geoLoading
+              ? 'Acquiring location...'
+              : hasLocation
+                ? `Location acquired: ${lat?.toFixed(4)}, ${lng?.toFixed(4)}`
+                : 'Use my location'
+          }
           className={`p-2 mr-1 rounded-lg transition-colors disabled:opacity-40 ${
             hasLocation
               ? 'text-accent hover:bg-accent/10'
@@ -84,6 +92,7 @@ export function SearchBar({ onSearch, isSearching }: SearchBarProps) {
           type="button"
           onClick={handleSubmit}
           disabled={isSearching || !query.trim()}
+          aria-label={isSearching ? 'Searching...' : 'Search'}
           className="mr-2 px-3 py-1.5 bg-accent hover:bg-accent/90 disabled:bg-border disabled:text-subtle text-accent-foreground text-sm font-medium rounded-lg transition-colors flex items-center gap-1.5"
         >
           <AnimatePresence mode="wait" initial={false}>

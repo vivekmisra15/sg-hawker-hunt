@@ -77,7 +77,7 @@ export function ResultsList({ recommendations, state }: ResultsListProps) {
           </svg>
         </div>
         <p className="text-xs text-subtle tabular">
-          {visibleCount} of {recommendations.length}
+          {Math.min(visibleCount, recommendations.length)} of {recommendations.length}
         </p>
       </div>
 

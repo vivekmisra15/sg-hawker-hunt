@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useRef, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AgentTrace, SearchState } from '../hooks/useSSE';
 
@@ -19,8 +19,28 @@ interface AgentPanelProps {
   state: SearchState;
 }
 
+/** Detect OS prefers-reduced-motion via matchMedia, with SSR-safe default. */
+function usePrefersReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  });
+
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const handler = (e: MediaQueryListEvent) => setReduced(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
+  return reduced;
+}
+
 function TypewriterText({ text, isNew }: { text: string; isNew: boolean }) {
-  if (!isNew) {
+  const prefersReducedMotion = usePrefersReducedMotion();
+
+  // When reduced motion is preferred, or the line is not new, render plain text
+  if (!isNew || prefersReducedMotion) {
     return <span className="dark:text-green-300/70 text-emerald-800/80">{text}</span>;
   }
   return (
