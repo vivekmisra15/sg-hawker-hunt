@@ -143,3 +143,49 @@ async def test_uses_default_singapore_coords_when_no_location_provided():
     events = [e async for e in orchestrator.run(request)]
     location_events = [e for e in events if e.agent == "orchestrator" and "default" in e.message.lower()]
     assert len(location_events) >= 1
+
+
+@pytest.mark.asyncio
+async def test_outer_run_catches_unexpected_exception_and_yields_error():
+    """The outer run() method should catch arbitrary exceptions from sub-agents
+    and yield a single error event instead of crashing the SSE stream."""
+    mock_rec = MagicMock()
+    mock_rec.run = AsyncMock(side_effect=RuntimeError("Unexpected DB crash"))
+    orchestrator = OrchestratorAgent(
+        location_agent=_mock_location_agent(),
+        hygiene_agent=_mock_hygiene_agent(),
+        recommendation_agent=mock_rec,
+        anthropic_client=_mock_anthropic_client(_PARSE_RESPONSE),
+    )
+    request = SearchRequest(query="chicken rice", lat=1.2805, lng=103.8446)
+    events = [e async for e in orchestrator.run(request)]
+
+    # Should NOT raise — should produce an error event
+    error_events = [e for e in events if e.type == "error"]
+    assert len(error_events) >= 1
+    assert "Unexpected DB crash" in error_events[0].message
+
+
+@pytest.mark.asyncio
+async def test_outer_run_catches_query_parse_crash():
+    """If the query parse itself crashes (e.g. Anthropic API down),
+    the outer run() should still yield an error event."""
+    mock_client = MagicMock()
+    mock_client.messages = MagicMock()
+    mock_client.messages.create = AsyncMock(
+        side_effect=RuntimeError("Anthropic API unreachable")
+    )
+    orchestrator = OrchestratorAgent(
+        location_agent=_mock_location_agent(),
+        hygiene_agent=_mock_hygiene_agent(),
+        recommendation_agent=_mock_recommendation_agent(),
+        anthropic_client=mock_client,
+    )
+    request = SearchRequest(query="food", lat=1.2805, lng=103.8446)
+    events = [e async for e in orchestrator.run(request)]
+
+    # The parse failure should be caught by the inner try in _parse_query,
+    # which returns defaults — so the flow should continue to completion
+    # (it does NOT propagate to the outer run wrapper in this case)
+    result_events = [e for e in events if e.type == "result"]
+    assert len(result_events) >= 1

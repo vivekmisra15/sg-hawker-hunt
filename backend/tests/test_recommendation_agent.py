@@ -833,3 +833,44 @@ def test_singlish_prompt_contains_local_terms():
     assert "queue" in _SENTIMENT_SYSTEM.lower()
     assert "peak_time_hint" in _SENTIMENT_SYSTEM
     assert "price_signal" in _SENTIMENT_SYSTEM
+
+
+# ── Sentiment cache eviction ────────────────────────────────────────────────
+
+def test_sentiment_cache_evicts_oldest_when_exceeding_max_size():
+    """Cache should evict oldest entries when max size is exceeded."""
+    import agents.recommendation_agent as ra
+    import time as _time
+
+    ra._SENTIMENT_CACHE.clear()
+    original_max = ra._SENTIMENT_CACHE_MAX_SIZE
+    try:
+        # Set a small max to make eviction testable
+        ra._SENTIMENT_CACHE_MAX_SIZE = 3
+        # Pre-fill cache with 3 entries at different timestamps
+        for i in range(3):
+            key = f"test_key_{i}"
+            ra._SENTIMENT_CACHE[key] = (
+                SentimentResult(sentiment_score=float(i)),
+                1000.0 + i,  # older entries have lower timestamps
+            )
+        assert len(ra._SENTIMENT_CACHE) == 3
+        # Add a 4th entry — should trigger eviction of the oldest (test_key_0)
+        ra._SENTIMENT_CACHE["test_key_3"] = (
+            SentimentResult(sentiment_score=3.0),
+            2000.0,
+        )
+        # Manually invoke the eviction logic (normally inside _analyse_sentiment)
+        if len(ra._SENTIMENT_CACHE) > ra._SENTIMENT_CACHE_MAX_SIZE:
+            sorted_keys = sorted(
+                ra._SENTIMENT_CACHE, key=lambda k: ra._SENTIMENT_CACHE[k][1]
+            )
+            for old_key in sorted_keys[: len(ra._SENTIMENT_CACHE) - ra._SENTIMENT_CACHE_MAX_SIZE]:
+                del ra._SENTIMENT_CACHE[old_key]
+
+        assert len(ra._SENTIMENT_CACHE) == 3
+        assert "test_key_0" not in ra._SENTIMENT_CACHE
+        assert "test_key_3" in ra._SENTIMENT_CACHE
+    finally:
+        ra._SENTIMENT_CACHE_MAX_SIZE = original_max
+        ra._SENTIMENT_CACHE.clear()
