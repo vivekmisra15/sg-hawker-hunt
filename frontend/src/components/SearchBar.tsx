@@ -127,17 +127,21 @@ export function SearchBar({ onSearch, isSearching }: SearchBarProps) {
       </div>
 
       {/* Example chips */}
-      <div className="flex flex-wrap gap-2">
-        {EXAMPLE_CHIPS.map(chip => (
-          <button
-            key={chip}
-            type="button"
-            onClick={() => handleChip(chip)}
-            className="text-xs bg-border/60 hover:bg-border text-muted hover:text-foreground rounded-full px-3 py-1 transition-colors cursor-pointer"
-          >
-            {chip}
-          </button>
-        ))}
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Example searches">
+        {EXAMPLE_CHIPS.map(chip => {
+          const text = chip.replace(/^[\p{Emoji}\s]+/u, '').trim();
+          return (
+            <button
+              key={chip}
+              type="button"
+              onClick={() => handleChip(chip)}
+              aria-label={`Try search: ${text}`}
+              className="text-xs bg-border/60 hover:bg-border text-muted hover:text-foreground rounded-full px-3 py-1 transition-colors cursor-pointer"
+            >
+              {chip}
+            </button>
+          );
+        })}
       </div>
     </div>
   );

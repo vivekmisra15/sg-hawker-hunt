@@ -44,11 +44,13 @@ class OrchestratorAgent:
         hygiene_agent: HygieneAgent | None = None,
         recommendation_agent: RecommendationAgent | None = None,
         anthropic_client: anthropic.AsyncAnthropic | None = None,
+        onemap_client: OneMapClient | None = None,
     ):
         self._location = location_agent or LocationAgent()
         self._hygiene = hygiene_agent or HygieneAgent()
         self._recommendation = recommendation_agent or RecommendationAgent()
         self._anthropic = anthropic_client or anthropic.AsyncAnthropic()
+        self._onemap = onemap_client or OneMapClient()
 
     async def run(self, request: SearchRequest) -> AsyncGenerator[AgentEvent, None]:
         try:
@@ -156,8 +158,7 @@ class OrchestratorAgent:
 
         if location_hint:
             try:
-                onemap = OneMapClient()
-                lat, lng, address = await onemap.geocode(location_hint)
+                lat, lng, address = await self._onemap.geocode(location_hint)
                 return lat, lng, address
             except Exception as e:
                 logger.warning("Geocode for %r failed: %s — using default", location_hint, e)

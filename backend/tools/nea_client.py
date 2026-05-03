@@ -20,6 +20,7 @@ class NEAClientError(Exception):
 
 _cache: dict = {}  # module-level singleton: {resource_id: (records, timestamp)}
 CACHE_TTL_SECONDS = 3600
+_CACHE_MAX_ENTRIES = 10  # NEA has ~3 resource IDs; 10 is generous headroom
 
 # ── Static grades (from sfa_scraper.py output) ───────────────────────────────
 _GRADES_FILE = Path(__file__).parent.parent / "data" / "hygiene_grades_full.json"
@@ -109,6 +110,11 @@ class NEAClient:
             raise NEAClientError("NEA API returned success=false")
         records = body["result"]["records"]
         _cache[resource_id] = (records, time.time())
+        # Evict oldest entries if cache exceeds max size
+        if len(_cache) > _CACHE_MAX_ENTRIES:
+            sorted_keys = sorted(_cache, key=lambda k: _cache[k][1])
+            for old_key in sorted_keys[: len(_cache) - _CACHE_MAX_ENTRIES]:
+                del _cache[old_key]
         return records
 
     async def get_centres(self) -> list[CentreInfo]:

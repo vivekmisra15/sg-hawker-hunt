@@ -104,12 +104,21 @@ No markdown, no explanation — just the JSON object."""
 _SGT = pytz.timezone("Asia/Singapore")
 
 
+_json_list_cache: dict[str, list[str]] = {}
+
+
 def _load_json_list(path: str) -> list[str]:
+    """Load a JSON list of strings, uppercased.  Cached after first read."""
+    cached = _json_list_cache.get(path)
+    if cached is not None:
+        return cached
     try:
         with open(path) as f:
-            return [s.upper() for s in json.load(f)]
+            result = [s.upper() for s in json.load(f)]
     except Exception:
-        return []
+        result = []
+    _json_list_cache[path] = result
+    return result
 
 
 def _parse_time_range(s: str) -> list[tuple[int, int]]:
@@ -207,7 +216,7 @@ class RecommendationAgent:
         preferences: dict,
     ) -> list[RankedRecommendation]:
         """
-        Return up to 3 ranked recommendations.
+        Return up to 10 ranked recommendations.
         preferences keys: cuisine_type, dietary (list[str]), avoid (list[str]),
                           budget (str), time_context (str)
         """

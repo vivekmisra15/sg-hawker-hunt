@@ -148,3 +148,48 @@ async def test_static_fallback_calls_get_static_only_once():
     assert "SFA data" in results[0].reasoning_trace
     # The critical assertion: static fetch called exactly once, not twice
     assert mock_nea.get_static_hygiene_for_centre.call_count == 1
+
+
+# ── Closure date tests ─────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_not_closed_today_when_centre_absent_from_closure_list():
+    """Centre not in closure list should have is_closed_today=False."""
+    mock_nea = _make_mock_nea(
+        grades={"TIAN TIAN CHICKEN RICE": MAXWELL_GRADE},
+        closures=["Ang Mo Kio Market"],  # different centre
+    )
+    agent = HygieneAgent(nea_client=mock_nea)
+    results = await agent.run(["Maxwell Food Centre"])
+    assert results[0].is_closed_today is False
+    assert "open today" in results[0].reasoning_trace
+
+
+@pytest.mark.asyncio
+async def test_closure_api_error_does_not_crash():
+    """When closure dates API fails, agent should still return results with is_closed_today=False."""
+    mock_nea = MagicMock()
+    mock_nea.get_hygiene_grades = AsyncMock(return_value={
+        "TIAN TIAN CHICKEN RICE": MAXWELL_GRADE
+    })
+    mock_nea.get_closure_dates = AsyncMock(side_effect=NEAClientError("timeout"))
+    mock_nea.get_static_hygiene_for_centre = MagicMock(return_value=[])
+    agent = HygieneAgent(nea_client=mock_nea)
+    results = await agent.run(["Maxwell Food Centre"])
+    assert len(results) == 1
+    assert results[0].is_closed_today is False
+    assert results[0].grade == "A"
+
+
+@pytest.mark.asyncio
+async def test_closure_substring_match():
+    """Closure list may use a longer or shorter name -- substring match should work."""
+    mock_nea = _make_mock_nea(
+        grades={"TIAN TIAN CHICKEN RICE": MAXWELL_GRADE},
+        closures=["Maxwell Food Centre Hawker"],  # longer name, contains the centre name
+    )
+    agent = HygieneAgent(nea_client=mock_nea)
+    results = await agent.run(["Maxwell Food Centre"])
+    assert results[0].is_closed_today is True
+    assert "closed" in results[0].reasoning_trace.lower()
