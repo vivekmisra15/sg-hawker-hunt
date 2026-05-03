@@ -36,11 +36,9 @@ function usePrefersReducedMotion(): boolean {
   return reduced;
 }
 
-function TypewriterText({ text, isNew }: { text: string; isNew: boolean }) {
-  const prefersReducedMotion = usePrefersReducedMotion();
-
+function TypewriterText({ text, isNew, reducedMotion }: { text: string; isNew: boolean; reducedMotion: boolean }) {
   // When reduced motion is preferred, or the line is not new, render plain text
-  if (!isNew || prefersReducedMotion) {
+  if (!isNew || reducedMotion) {
     return <span className="dark:text-green-300/70 text-emerald-800/80">{text}</span>;
   }
   return (
@@ -61,6 +59,7 @@ function TypewriterText({ text, isNew }: { text: string; isNew: boolean }) {
 }
 
 export function AgentPanel({ traces, state }: AgentPanelProps) {
+  const prefersReducedMotion = usePrefersReducedMotion();
   const scrollRef = useRef<HTMLDivElement>(null);
   const prevTraceLengthRef = useRef(0);
 
@@ -143,7 +142,7 @@ export function AgentPanel({ traces, state }: AgentPanelProps) {
                   <div className="px-4 pb-2 space-y-0.5">
                     {block.messages.map(msg => (
                       <div key={msg.timestamp} className="leading-relaxed">
-                        <TypewriterText text={msg.message} isNew={msg.isNew} />
+                        <TypewriterText text={msg.message} isNew={msg.isNew} reducedMotion={prefersReducedMotion} />
                       </div>
                     ))}
                   </div>

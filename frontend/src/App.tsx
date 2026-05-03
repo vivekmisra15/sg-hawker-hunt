@@ -18,10 +18,14 @@ function App() {
         {/* Header */}
         <header className="flex items-center justify-between mb-8">
           <div
-            className="flex items-center gap-2 cursor-pointer group"
+            className="flex items-center gap-2 cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 rounded-lg px-1 -mx-1"
             onClick={reset}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); reset(); } }}
+            tabIndex={0}
+            role="button"
+            aria-label="Reset search and return to start"
           >
-            <span className="text-accent text-xl leading-none">●</span>
+            <span className="text-accent text-xl leading-none" aria-hidden="true">●</span>
             <h1 className="text-xl font-semibold text-foreground tracking-tight group-hover:text-foreground/80 transition-colors">
               Hawker Hunt
             </h1>
@@ -84,7 +88,8 @@ function App() {
 
               {/* Map — right column, sticky, always shown when results ready */}
               {showMap && (
-                <motion.div
+                <motion.section
+                  aria-label="Map of recommended hawker centres"
                   initial={{ opacity: 0, scale: 0.97 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ type: 'spring', stiffness: 300, damping: 30, delay: 0.2 }}
@@ -92,7 +97,7 @@ function App() {
                   style={{ height: 'calc(100vh - 6rem)' }}
                 >
                   <HawkerMap recommendations={results} />
-                </motion.div>
+                </motion.section>
               )}
             </motion.div>
           )}
@@ -100,9 +105,9 @@ function App() {
 
         {/* Mobile map — shown below results */}
         {showMap && (
-          <div className="lg:hidden mt-4" style={{ height: '320px' }}>
+          <section className="lg:hidden mt-4" aria-label="Map of recommended hawker centres" style={{ height: '320px' }}>
             <HawkerMap recommendations={results} />
-          </div>
+          </section>
         )}
 
       </div>

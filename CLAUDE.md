@@ -1044,3 +1044,67 @@ Each cycle selects 3 improvements scored by Impact × Feasibility × Breadth (�
 
 ---
 
+## Session Notes -- RQA Run 03 (2026-05-03)
+
+### Cycle 1 -- JSON Cache, Header A11y, OneMapClient Reuse
+
+**C1-1: Cache `_load_json_list` at module level**
+- Added `_json_list_cache: dict[str, list[str]]` in `recommendation_agent.py`
+- First disk read cached; subsequent calls return cached result
+- Eliminates redundant file I/O on every search request for static JSON files
+- Also fixed stale docstring: "Return up to 3" -> "Return up to 10"
+
+**C1-2: Header reset button accessibility**
+- `App.tsx`: added `role="button"`, `tabIndex={0}`, `aria-label`, `onKeyDown` (Enter/Space)
+- Focus ring with `focus-visible:ring-2`; decorative dot marked `aria-hidden="true"`
+
+**C1-3: Reuse OneMapClient in orchestrator**
+- Added `onemap_client` parameter to `OrchestratorAgent.__init__`; stored as `self._onemap`
+- `_resolve_location` uses injected client instead of creating a new one per call
+- Test verifies injected mock is called exactly once
+
+### Cycle 2 -- SSE Resilience, Reduced-Motion Perf, NEA Cache Bound
+
+**C2-1: SSE stream timeout and mid-stream error resilience**
+- `api.ts`: 120s `setTimeout` auto-aborts hung streams
+- `try/finally` around reader loop ensures `onComplete()` always fires
+- `userCancelled` flag distinguishes user abort (silent) from timeout abort (error message)
+
+**C2-2: Lift usePrefersReducedMotion from TypewriterText**
+- Hook moved from `TypewriterText` to `AgentPanel` parent; passed as `reducedMotion` prop
+- One `matchMedia` listener per panel instead of one per trace line
+
+**C2-3: Bound NEA client cache**
+- `_CACHE_MAX_ENTRIES = 10` added to `nea_client.py`
+- Eviction logic in `_fetch()` removes oldest entries above max
+- Same pattern as sentiment cache eviction from RQA-02
+
+### Cycle 3 -- Map A11y, Closure Tests, Chip Labels
+
+**C3-1: Map section landmarks and labels**
+- Desktop: `motion.div` -> `motion.section` with `aria-label="Map of recommended hawker centres"`
+- Mobile: `<div>` -> `<section>` with same aria-label
+- Both are now identifiable landmarks in accessibility tree
+
+**C3-2: Hygiene closure date test coverage**
+- 3 new tests: centre absent from closures, closure API failure, substring match
+- Previously only exact-match happy path was tested
+
+**C3-3: SearchBar example chips accessibility**
+- Each chip: `aria-label="Try search: {text}"`
+- Container: `role="group"`, `aria-label="Example searches"`
+
+### Test results -- RQA Run 03
+- 96/96 passing (+6 from pre-RQA-03 baseline of 90)
+- Frontend build: zero TypeScript errors, 434 KB JS bundle
+- Zero regressions across all 3 cycles
+
+### Carry-forward to RQA Run 04
+- No rate-limiting or concurrent request safety tests
+- `_cuisine_time_score` substring matching could produce false positives
+- `ResultsList` empty state uses emoji instead of SVG icon
+- `test_sse_endpoint.py` uses `try/finally` instead of `monkeypatch` for orchestrator swap
+- `HawkerMap` DivIcon instances not cached by rank number
+
+---
+

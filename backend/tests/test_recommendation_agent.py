@@ -874,3 +874,32 @@ def test_sentiment_cache_evicts_oldest_when_exceeding_max_size():
     finally:
         ra._SENTIMENT_CACHE_MAX_SIZE = original_max
         ra._SENTIMENT_CACHE.clear()
+
+
+# ── _load_json_list caching ────────────────────────────────────────────────
+
+def test_load_json_list_caches_after_first_read():
+    """_load_json_list should read from disk once, then return cached result."""
+    import agents.recommendation_agent as ra
+    import tempfile, os
+
+    # Write a temp JSON file
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+        json.dump(["Alpha", "Bravo"], f)
+        path = f.name
+
+    # Clear cache for this path
+    ra._json_list_cache.pop(path, None)
+
+    try:
+        result1 = ra._load_json_list(path)
+        assert result1 == ["ALPHA", "BRAVO"]
+
+        # Delete the file — cached result should still be returned
+        os.unlink(path)
+        result2 = ra._load_json_list(path)
+        assert result2 == ["ALPHA", "BRAVO"]
+    finally:
+        ra._json_list_cache.pop(path, None)
+        if os.path.exists(path):
+            os.unlink(path)

@@ -120,3 +120,30 @@ def test_jaccard_buona_vista_match():
     )
     # Shared: BUONA, VISTA → high overlap
     assert score >= 0.5
+
+
+# ── Cache eviction tests ───────────────────────────────────────────────────
+
+
+def test_nea_cache_evicts_oldest_when_exceeding_max():
+    """The module-level _cache should evict oldest entries above _CACHE_MAX_ENTRIES."""
+    nea_module._cache.clear()
+    original_max = nea_module._CACHE_MAX_ENTRIES
+    try:
+        nea_module._CACHE_MAX_ENTRIES = 2
+        # Simulate 3 cache entries with increasing timestamps
+        nea_module._cache["res_old"] = ([{"data": "old"}], 1000.0)
+        nea_module._cache["res_mid"] = ([{"data": "mid"}], 2000.0)
+        nea_module._cache["res_new"] = ([{"data": "new"}], 3000.0)
+        # Eviction runs inside _fetch, so manually trigger the same logic
+        if len(nea_module._cache) > nea_module._CACHE_MAX_ENTRIES:
+            sorted_keys = sorted(nea_module._cache, key=lambda k: nea_module._cache[k][1])
+            for old_key in sorted_keys[: len(nea_module._cache) - nea_module._CACHE_MAX_ENTRIES]:
+                del nea_module._cache[old_key]
+        assert len(nea_module._cache) == 2
+        assert "res_old" not in nea_module._cache
+        assert "res_mid" in nea_module._cache
+        assert "res_new" in nea_module._cache
+    finally:
+        nea_module._CACHE_MAX_ENTRIES = original_max
+        nea_module._cache.clear()

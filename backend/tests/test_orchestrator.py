@@ -189,3 +189,23 @@ async def test_outer_run_catches_query_parse_crash():
     # (it does NOT propagate to the outer run wrapper in this case)
     result_events = [e for e in events if e.type == "result"]
     assert len(result_events) >= 1
+
+
+@pytest.mark.asyncio
+async def test_reuses_injected_onemap_client_for_geocode():
+    """The orchestrator should use its stored OneMapClient, not create a new one."""
+    mock_onemap = MagicMock()
+    mock_onemap.geocode = AsyncMock(return_value=(1.3000, 103.8500, "Toa Payoh"))
+    orchestrator = OrchestratorAgent(
+        location_agent=_mock_location_agent(),
+        hygiene_agent=_mock_hygiene_agent(),
+        recommendation_agent=_mock_recommendation_agent(),
+        anthropic_client=_mock_anthropic_client(
+            '{"cuisine_type":"laksa","location_hint":"Toa Payoh","dietary":[],"avoid":[]}'
+        ),
+        onemap_client=mock_onemap,
+    )
+    request = SearchRequest(query="laksa near Toa Payoh")
+    events = [e async for e in orchestrator.run(request)]
+    # The injected client should have been called exactly once for geocoding
+    mock_onemap.geocode.assert_awaited_once_with("Toa Payoh")
