@@ -21,17 +21,24 @@ from rag.seed import seed
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup: seed ChromaDB if empty. Shutdown: cleanup if needed."""
+    """Startup: check ChromaDB status. Shutdown: cleanup if needed."""
     # Startup
+    environment = os.getenv("ENVIRONMENT", "development")
     vs = VectorStore()
     size = vs.collection_size()
+
     if size == 0:
-        print("ChromaDB empty — seeding knowledge base...")
-        seed()
-        new_size = vs.collection_size()
-        print(f"Seeded {new_size} documents into ChromaDB")
+        if environment == "production":
+            print("WARNING: ChromaDB empty on production — seeding disabled to prevent startup timeout.")
+            print("To seed, run: python3 -m rag.seed locally, then redeploy.")
+        else:
+            print("ChromaDB empty — seeding knowledge base...")
+            seed()
+            new_size = vs.collection_size()
+            print(f"Seeded {new_size} documents into ChromaDB")
     else:
         print(f"ChromaDB ready — {size} documents")
+
     yield
     # Shutdown
     pass
