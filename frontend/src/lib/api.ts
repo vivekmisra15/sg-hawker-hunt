@@ -1,6 +1,8 @@
 import { AgentEvent } from '../types';
 
-const BASE_URL = '/api';
+const BASE_URL = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL}/api`
+  : '/api';
 
 /** Maximum time (ms) to wait for the entire SSE stream before aborting. */
 const STREAM_TIMEOUT_MS = 120_000;
