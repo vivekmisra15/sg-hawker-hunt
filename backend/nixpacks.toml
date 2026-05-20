@@ -1,2 +1,5 @@
 [phases.setup]
-nixpkgs = ["python311"]
+nixpkgs = ["python311" "gcc" "pkg-config"]
+
+[build]
+env = { PYTHONUNBUFFERED = "1" }
