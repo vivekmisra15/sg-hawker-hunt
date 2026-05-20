@@ -4,6 +4,7 @@ Run: uvicorn main:app --reload
 """
 import json
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,16 +15,44 @@ load_dotenv()
 from sse_starlette.sse import EventSourceResponse
 from agents.orchestrator import OrchestratorAgent
 from models.schemas import SearchRequest
+from rag.vector_store import VectorStore
+from rag.seed import seed
 
-app = FastAPI(title="Hawker Hunt API", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup: seed ChromaDB if empty. Shutdown: cleanup if needed."""
+    # Startup
+    vs = VectorStore()
+    size = vs.collection_size()
+    if size == 0:
+        print("ChromaDB empty — seeding knowledge base...")
+        seed()
+        new_size = vs.collection_size()
+        print(f"Seeded {new_size} documents into ChromaDB")
+    else:
+        print(f"ChromaDB ready — {size} documents")
+    yield
+    # Shutdown
+    pass
+
+
+app = FastAPI(title="Hawker Hunt API", version="0.1.0", lifespan=lifespan)
+
+# CORS configuration: allow dev and production frontend URLs
+frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
+cors_origins_raw = os.getenv("BACKEND_CORS_ORIGINS", "")
+extra_origins = [o.strip() for o in cors_origins_raw.split(",") if o.strip()]
+
+allow_origins = list(set([
+    frontend_url,
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+] + extra_origins))
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        os.getenv("FRONTEND_URL", "http://localhost:5173"),
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
