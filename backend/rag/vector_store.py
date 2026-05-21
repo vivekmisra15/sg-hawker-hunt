@@ -78,3 +78,9 @@ class VectorStore:
 
     def collection_size(self) -> int:
         return self._collection.count()
+
+    def warmup(self) -> None:
+        """Pre-warm the embedding function to cache the ONNX model.
+        Call this at startup (e.g., in FastAPI lifespan) to avoid timeout on first query.
+        """
+        self._ef(["warmup"])
