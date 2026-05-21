@@ -21,10 +21,14 @@ from rag.seed import seed
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup: check ChromaDB status. Shutdown: cleanup if needed."""
+    """Startup: check ChromaDB status and warm up embedding model. Shutdown: cleanup if needed."""
     # Startup
     environment = os.getenv("ENVIRONMENT", "development")
     vs = VectorStore()
+
+    # Pre-warm the embedding model (cached from build phase on Render, instant on first run)
+    vs.warmup()
+
     size = vs.collection_size()
 
     if size == 0:

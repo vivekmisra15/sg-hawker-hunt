@@ -1,5 +1,11 @@
 [phases.setup]
 nixpkgs = ["python311" "gcc" "pkg-config"]
 
+[phases.build]
+cmds = [
+  "pip install -r requirements.txt",
+  "python -c \"from chromadb.utils.embedding_functions import DefaultEmbeddingFunction; ef = DefaultEmbeddingFunction(); ef(['warmup']); print('✓ Embedding model cached.')\"",
+]
+
 [build]
 env = { PYTHONUNBUFFERED = "1" }
