@@ -1,4 +1,6 @@
 """Tests for NEA API client."""
+from pathlib import Path
+
 import pytest
 import respx
 import httpx
@@ -147,3 +149,45 @@ def test_nea_cache_evicts_oldest_when_exceeding_max():
     finally:
         nea_module._CACHE_MAX_ENTRIES = original_max
         nea_module._cache.clear()
+
+
+# ── Postal code matching tests ────────────────────────────────────────────
+
+
+def test_postcode_match_takes_priority_over_name():
+    """Postal code match should return results even if name doesn't match."""
+    client = NEAClient()
+    # Reset static grades cache
+    nea_module._static_grades = None
+    nea_module._static_grades_by_postcode = None
+    nea_module._GRADES_FILE = Path(__file__).parent.parent / "data" / "hygiene_grades_full.json"
+    if not nea_module._GRADES_FILE.exists():
+        pytest.skip("hygiene_grades_full.json not present")
+
+    by_name, by_postcode = nea_module._load_static_grades()
+    if not by_postcode:
+        pytest.skip("no postal code data")
+
+    # Pick the first postal code and its centre name
+    first_pc = next(iter(by_postcode))
+    real_name = by_postcode[first_pc].get("centre_name", "")
+
+    # Use a completely wrong name but correct postal code
+    results = client.get_static_hygiene_for_centre("NONEXISTENT CENTRE XYZ", postcode=first_pc)
+    assert len(results) > 0
+    assert results[0].centre_name == real_name
+
+
+def test_sequence_matcher_matches_bedok_variants():
+    """SequenceMatcher should match common Bedok naming variants."""
+    from tools.nea_client import _name_similarity
+    # Bedok is a real-world problem case
+    score = _name_similarity("Bedok Interchange Hawker Centre", "Bedok Interchange Food Centre")
+    assert score >= 0.55, f"Expected ≥0.55 but got {score}"
+
+
+def test_name_similarity_rejects_unrelated():
+    """Completely different centre names should score below threshold."""
+    from tools.nea_client import _name_similarity
+    score = _name_similarity("Maxwell Food Centre", "Yishun Park Hawker Centre")
+    assert score < 0.55, f"Expected <0.55 but got {score}"

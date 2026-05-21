@@ -20,11 +20,15 @@ class HygieneAgent:
     def __init__(self, nea_client: NEAClient | None = None):
         self._nea = nea_client or NEAClient()
 
-    async def run(self, centre_names: list[str]) -> list[HygieneResult]:
+    async def run(
+        self, centre_names: list[str], postcodes: dict[str, str] | None = None
+    ) -> list[HygieneResult]:
         """
         Return one HygieneResult per centre name.
+        postcodes: optional {centre_name: postcode} mapping for improved hygiene matching.
         Degrades gracefully on NEAClientError — returns UNKNOWN grade.
         """
+        postcodes = postcodes or {}
         try:
             all_grades = await self._nea.get_hygiene_grades()
         except NEAClientError as e:
@@ -61,7 +65,8 @@ class HygieneAgent:
                 data_source = "live"
             else:
                 # Live API had no match — try static grades from sfa_scraper output
-                static_stalls = self._nea.get_static_hygiene_for_centre(centre_name)
+                postcode = postcodes.get(centre_name, "")
+                static_stalls = self._nea.get_static_hygiene_for_centre(centre_name, postcode=postcode)
                 if static_stalls:
                     grade = _best_grade([r.grade for r in static_stalls])
                     demerit = min(r.demerit_points for r in static_stalls)

@@ -3,6 +3,7 @@ LocationAgent — finds and enriches nearby hawker centres given a user location
 Single responsibility: coordinates → list[LocationResult] ranked by distance.
 """
 import logging
+import re
 from datetime import datetime
 import pytz
 
@@ -78,6 +79,13 @@ class LocationAgent:
             is_open = place.get("currentOpeningHours", {}).get("openNow", False)
             price_level: str | None = place.get("priceLevel")
 
+            # Extract postcode from formatted address (Singapore XXXXXX)
+            postcode: str | None = None
+            formatted_addr = place.get("formattedAddress", "") or place.get("shortFormattedAddress", "")
+            pc_match = re.search(r"Singapore\s+(\d{6})", formatted_addr)
+            if pc_match:
+                postcode = pc_match.group(1)
+
             # Fetch details for reviews if we have a valid place_id
             reviews_summary: str | None = None
             try:
@@ -87,6 +95,11 @@ class LocationAgent:
                     base_rating = details.get("rating", base_rating)
                     base_count = details.get("userRatingCount", base_count)
                     price_level = details.get("priceLevel", price_level)
+                    if not postcode:
+                        detail_addr = details.get("formattedAddress", "") or ""
+                        pc_m = re.search(r"Singapore\s+(\d{6})", detail_addr)
+                        if pc_m:
+                            postcode = pc_m.group(1)
                     reviews = details.get("reviews", [])
                     if reviews:
                         snippets = [
@@ -120,6 +133,7 @@ class LocationAgent:
                     google_rating=base_rating,
                     review_count=base_count,
                     reviews_summary=reviews_summary,
+                    postcode=postcode,
                     price_level=price_level,
                     crowd_level=crowd,
                     reasoning_trace=trace,
