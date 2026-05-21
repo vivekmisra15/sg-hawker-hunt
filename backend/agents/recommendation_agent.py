@@ -196,6 +196,78 @@ def _cuisine_time_score(cuisine_combined: str, time_context: str) -> float:
     return 0.0
 
 
+# Cuisine normalisation: maps common variants/Singlish to canonical cuisine names
+# used in ChromaDB metadata
+CUISINE_KEYWORDS: dict[str, str] = {
+    "chicken rice": "chicken rice",
+    "ji fan": "chicken rice",
+    "char kway teow": "char kway teow",
+    "ckw": "char kway teow",
+    "char kuay teow": "char kway teow",
+    "laksa": "laksa",
+    "bak kut teh": "bak kut teh",
+    "bkt": "bak kut teh",
+    "roti prata": "roti prata",
+    "prata": "roti prata",
+    "nasi lemak": "nasi lemak",
+    "wonton mee": "wonton mee",
+    "wanton mee": "wonton mee",
+    "satay": "satay",
+    "carrot cake": "carrot cake",
+    "chai tow kway": "carrot cake",
+    "oyster omelette": "oyster omelette",
+    "orh luak": "oyster omelette",
+    "or luak": "oyster omelette",
+    "fish head curry": "fish head curry",
+    "nasi padang": "nasi padang",
+    "hokkien mee": "hokkien mee",
+    "dim sum": "dim sum",
+    "congee": "congee",
+    "porridge": "porridge",
+    "ban mian": "ban mian",
+    "ban mee": "ban mian",
+    "mee siam": "mee siam",
+    "biryani": "biryani",
+    "murtabak": "murtabak",
+    "kaya toast": "kaya toast",
+    "duck rice": "duck rice",
+    "rojak": "rojak",
+    "popiah": "popiah",
+    "chee cheong fun": "chee cheong fun",
+    "hor fun": "hor fun",
+    "char siu": "char siu rice",
+    "economy rice": "economy rice",
+    "mixed rice": "economy rice",
+    "cai fan": "economy rice",
+    "claypot rice": "claypot rice",
+    "frog porridge": "frog porridge",
+    "yong tau foo": "yong tau foo",
+    "ytf": "yong tau foo",
+    "thunder tea rice": "thunder tea rice",
+    "lei cha": "thunder tea rice",
+    "tau huay": "tau huay",
+    "bbq stingray": "bbq stingray",
+    "stingray": "bbq stingray",
+}
+
+
+def _normalise_cuisine(raw_cuisine: str) -> str | None:
+    """Map a user-entered cuisine string to a canonical form for ChromaDB filtering.
+    Returns None if no known match is found (query proceeds unfiltered).
+    """
+    if not raw_cuisine:
+        return None
+    lower = raw_cuisine.strip().lower()
+    # Direct match
+    if lower in CUISINE_KEYWORDS:
+        return CUISINE_KEYWORDS[lower]
+    # Substring match — check if any known keyword appears in the query
+    for key, canonical in CUISINE_KEYWORDS.items():
+        if key in lower:
+            return canonical
+    return None
+
+
 _NEUTRAL_SENTIMENT = SentimentResult()
 
 
@@ -223,7 +295,14 @@ class RecommendationAgent:
         michelin_names = _load_json_list(os.path.join(_DATA_DIR, "michelin_2025.json"))
         halal_names = _load_json_list(os.path.join(_DATA_DIR, "halal_stalls.json"))
 
-        rag_results = self._vs.query(query, n_results=15)
+        cuisine_filter = _normalise_cuisine(preferences.get("cuisine_type", ""))
+        region_filter = preferences.get("region", "") or None
+
+        rag_results = self._vs.query(
+            query, n_results=15,
+            cuisine_filter=cuisine_filter,
+            region_filter=region_filter,
+        )
 
         loc_map: dict[str, LocationResult] = {r.centre_name.upper(): r for r in location_results}
         hygiene_map: dict[str, HygieneResult] = {r.centre_name.upper(): r for r in hygiene_results}

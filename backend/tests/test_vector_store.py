@@ -114,6 +114,30 @@ def test_metadata_bool_converted_to_string(store):
     assert results[0]["metadata"]["is_michelin"] == "True"
 
 
+def test_cuisine_filter_narrows_results(store):
+    """When cuisine_filter is set, only matching stalls are returned."""
+    store.add_documents(SAMPLE_DOCS)
+    results = store.query("food", n_results=10, cuisine_filter="chicken rice")
+    assert len(results) >= 1
+    assert all("chicken rice" in r["metadata"]["cuisine"] for r in results)
+
+
+def test_cuisine_filter_fallback_on_no_match(store):
+    """When cuisine_filter matches nothing, query falls back to unfiltered."""
+    store.add_documents(SAMPLE_DOCS)
+    results = store.query("food", n_results=10, cuisine_filter="nonexistent_cuisine_xyz")
+    # Should fall back to unfiltered and return all docs
+    assert len(results) == 3
+
+
+def test_region_filter_narrows_results(store):
+    """When region_filter is set, only stalls in that region are returned."""
+    store.add_documents(SAMPLE_DOCS)
+    results = store.query("food", n_results=10, region_filter="west")
+    assert len(results) >= 1
+    assert all(r["metadata"]["region"] == "west" for r in results)
+
+
 def test_upsert_updates_existing_doc(store):
     """Adding a doc with the same id should update, not duplicate."""
     store.add_documents(SAMPLE_DOCS[:1])

@@ -34,6 +34,12 @@ Extract from the user's query and return ONLY valid JSON with these keys:
                 "dinner" if query mentions dinner/evening/tonight/7pm,
                 "supper" if query mentions supper/late night/after 10pm/midnight,
                 "any" otherwise
+  region: "central" if query mentions central/CBD/Marina/Tanjong Pagar/Chinatown/Tiong Bahru/Bugis,
+          "east" if query mentions east/Bedok/Tampines/Katong/Pasir Ris/Changi/Geylang,
+          "west" if query mentions west/Clementi/Jurong/Buona Vista/Queenstown,
+          "north" if query mentions north/Woodlands/Yishun/Ang Mo Kio/Bishan,
+          "north_east" if query mentions north-east/Toa Payoh/Serangoon/Hougang/Punggol/Sengkang,
+          "" otherwise
 No markdown, no explanation — just the JSON object."""
 
 
@@ -100,9 +106,10 @@ class OrchestratorAgent:
         )
 
         centre_names = [r.centre_name for r in location_results]
+        centre_postcodes = {r.centre_name: r.postcode or "" for r in location_results}
 
         # ── Step 4: HygieneAgent + RAG query in parallel ──────────────────────
-        hygiene_task = asyncio.create_task(self._hygiene.run(centre_names))
+        hygiene_task = asyncio.create_task(self._hygiene.run(centre_names, postcodes=centre_postcodes))
         # RAG query happens inside RecommendationAgent.run — no separate parallel call needed
         hygiene_results = await hygiene_task
 
@@ -147,7 +154,7 @@ class OrchestratorAgent:
             return json.loads(raw)
         except Exception as e:
             logger.warning("Query parse failed (%s) — using defaults", e)
-            return {"cuisine_type": "", "location_hint": "", "dietary": [], "avoid": [], "budget": "any", "time_context": "any"}
+            return {"cuisine_type": "", "location_hint": "", "dietary": [], "avoid": [], "budget": "any", "time_context": "any", "region": ""}
 
     async def _resolve_location(
         self, request: SearchRequest, location_hint: str
