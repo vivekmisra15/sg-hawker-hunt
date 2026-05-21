@@ -1227,3 +1227,95 @@ From time banner: dismiss for session, actionable click-to-filter
 - linear-04 (keyboard navigation j/k/Enter/Escape)
 - 12 sub-patterns from Run 01 EXPAND phase
 
+---
+
+## Session Notes — Milestone 9: Data Quality Fixes (2026-05-21)
+
+### Three critical data quality problems fixed
+
+#### Fix B — Cuisine hard-filter in RAG retrieval
+
+**Problem:** Querying "chicken rice" returned "claypot rice" because ChromaDB semantic similarity
+treats all rice dishes as similar. No metadata-level filtering was applied.
+
+**Solution: ChromaDB `where`-clause filtering with cuisine normalisation**
+
+- `backend/rag/vector_store.py`: `query()` now accepts `cuisine_filter` and `region_filter` params.
+  When provided, a `where` clause (`$eq` on cuisine/region metadata) restricts results.
+  Falls back to unfiltered query if filtered returns 0 results.
+- `backend/agents/recommendation_agent.py`: New `CUISINE_KEYWORDS` dict maps 50+ variants
+  (Singlish/abbreviations) to canonical forms. `_normalise_cuisine()` resolves user input.
+  `run()` extracts `cuisine_type` and `region` from preferences and passes to vector store.
+- `backend/agents/orchestrator.py`: `_PARSE_SYSTEM` prompt now extracts `region` field
+  ("central"/"east"/"west"/"north"/"north_east") from user query.
+
+**ChromaDB operator note:** `$contains` does not work for metadata fields in chromadb 1.5.7.
+Used `$eq` instead — works because cuisine values are normalised to exact canonical forms.
+
+#### Fix C — Hygiene grade matching improvement
+
+**Problem:** Jaccard matching at 0.4 threshold failed for ~60% of centres. Names like
+"Bedok Interchange Hawker Centre" vs "Bedok Interchange Food Centre" had high Jaccard
+(shared tokens) but also needed SequenceMatcher for substring-level similarity.
+
+**Solution: Postal code as primary key + combined similarity at 0.55**
+
+- `backend/models/schemas.py`: `LocationResult` gains `postcode: Optional[str]` field.
+- `backend/agents/location_agent.py`: Extracts 6-digit postal code from Google Places
+  `formattedAddress` via regex `Singapore\s+(\d{6})`. Tries both search and detail responses.
+- `backend/tools/nea_client.py`:
+  - `_load_static_grades()` now returns two indexes: `by_name` and `by_postcode`
+  - New `_name_similarity()` function: max of `SequenceMatcher.ratio()` and Jaccard similarity
+  - `get_static_hygiene_for_centre()` now accepts `postcode` parameter
+  - Match priority: postal code exact → name exact → substring → combined similarity ≥ 0.55
+- `backend/agents/hygiene_agent.py`: `run()` accepts `postcodes: dict[str, str]` parameter,
+  passes postcode to `get_static_hygiene_for_centre()`.
+- `backend/agents/orchestrator.py`: Builds `centre_postcodes` dict from location results,
+  passes to hygiene agent.
+
+#### Fix A — Data pipeline agent
+
+**New file: `backend/tools/data_pipeline.py`**
+
+CLI tool to expand the ChromaDB knowledge base from 71 to 800+ stalls:
+1. Fetches all NEA hawker centres (123 centres with lat/lng)
+2. For each centre, searches Google Places for food stalls within 200m
+3. Generates rich 50-70 word descriptions via Claude Haiku
+4. Classifies cuisine type, tags, halal status, best time, price range via Claude Haiku
+5. Seeds ChromaDB with the expanded dataset
+
+Features:
+- Checkpoint pattern: saves per-centre results to `pipeline_checkpoint.json`
+- Rate limiting: 0.3s between Places calls, 0.2s between Claude calls
+- Region classification from lat/lng bounding boxes
+- Michelin/halal tagging from existing static JSON lists
+- Resume support: skips already-processed centres
+
+**Usage:**
+```bash
+cd backend
+python -m tools.data_pipeline --centres 3 --dry-run    # preview 3 centres
+python -m tools.data_pipeline --centres 10              # process 10 centres
+python -m tools.data_pipeline                           # full run (~120 centres)
+```
+
+**Dry-run result:** 123 centres fetched from NEA API. Stall expansion requires
+`GOOGLE_PLACES_API_KEY` and `ANTHROPIC_API_KEY` to be set.
+
+### Test results — Milestone 9
+- 106/106 passing (+10 from pre-M9 baseline of 96)
+- Frontend build: zero TypeScript errors, 478 KB JS bundle
+- Zero regressions
+
+### New tests added
+- `test_cuisine_filter_narrows_results` — ChromaDB where-clause filters correctly
+- `test_cuisine_filter_fallback_on_no_match` — falls back to unfiltered on 0 results
+- `test_region_filter_narrows_results` — region filter works
+- `test_normalise_cuisine_direct_match` — exact keyword matching
+- `test_normalise_cuisine_singlish_variants` — Singlish/abbreviation mapping
+- `test_normalise_cuisine_unknown_returns_none` — unknown cuisines return None
+- `test_cuisine_filter_passed_to_vector_store` — integration: filter reaches vector store
+- `test_postcode_match_takes_priority_over_name` — postal code > name matching
+- `test_sequence_matcher_matches_bedok_variants` — SequenceMatcher catches near-misses
+- `test_name_similarity_rejects_unrelated` — unrelated names score below threshold
+
