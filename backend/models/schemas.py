@@ -31,6 +31,7 @@ class LocationResult(BaseModel):
     google_rating: Optional[float] = None
     review_count: Optional[int] = None
     reviews_summary: Optional[str] = None
+    postcode: Optional[str] = None  # Singapore 6-digit postal code
     price_level: Optional[str] = None  # Google Places priceLevel enum string
     crowd_level: str = "unknown"  # quiet | busy | unknown
     reasoning_trace: str = ""
