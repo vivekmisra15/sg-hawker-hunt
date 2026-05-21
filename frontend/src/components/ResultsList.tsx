@@ -7,11 +7,14 @@ import { ResultCard } from './ResultCard';
 interface ResultsListProps {
   recommendations: RankedRecommendation[];
   state: SearchState;
+  selectedKey?: string | null;
+  onSelect?: (key: string) => void;
 }
 
-export function ResultsList({ recommendations, state }: ResultsListProps) {
+export function ResultsList({ recommendations, state, selectedKey, onSelect }: ResultsListProps) {
   const [visibleCount, setVisibleCount] = useState(5);
   const sentinelRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const totalRef = useRef(recommendations.length);
   totalRef.current = recommendations.length;
 
@@ -21,7 +24,6 @@ export function ResultsList({ recommendations, state }: ResultsListProps) {
   }, [recommendations]);
 
   // IntersectionObserver: reveal 5 more when sentinel enters viewport
-  // Uses totalRef to avoid re-creating observer on every visibleCount change
   useEffect(() => {
     const sentinel = sentinelRef.current;
     if (!sentinel) return;
@@ -38,6 +40,15 @@ export function ResultsList({ recommendations, state }: ResultsListProps) {
     return () => observer.disconnect();
   }, [recommendations]);
 
+  // Scroll to selected card when selectedKey changes (from map click)
+  useEffect(() => {
+    if (!selectedKey || !containerRef.current) return;
+    const card = containerRef.current.querySelector(`[data-key="${CSS.escape(selectedKey)}"]`);
+    if (card) {
+      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [selectedKey]);
+
   if (state !== 'complete') return null;
 
   if (recommendations.length === 0) {
@@ -47,7 +58,10 @@ export function ResultsList({ recommendations, state }: ResultsListProps) {
         animate={{ opacity: 1 }}
         className="text-center py-12 text-muted"
       >
-        <div className="text-4xl mb-3">🍽️</div>
+        <svg className="w-10 h-10 mx-auto mb-3 text-subtle" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
         <p className="text-sm">No stalls found matching your search. Try a different query.</p>
       </motion.div>
     );
@@ -57,7 +71,7 @@ export function ResultsList({ recommendations, state }: ResultsListProps) {
   const hasMore = visibleCount < recommendations.length;
 
   return (
-    <div className="space-y-3">
+    <div ref={containerRef} className="space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <p className="text-xs text-subtle uppercase tracking-wider font-medium">
@@ -83,11 +97,17 @@ export function ResultsList({ recommendations, state }: ResultsListProps) {
 
       <AnimatePresence>
         {visible.map((rec, i) => (
-          <ResultCard key={rec.stall_name + rec.centre_name} recommendation={rec} index={i} />
+          <ResultCard
+            key={rec.stall_name + rec.centre_name}
+            recommendation={rec}
+            index={i}
+            isSelected={`${rec.stall_name}::${rec.centre_name}` === selectedKey}
+            onSelect={onSelect}
+          />
         ))}
       </AnimatePresence>
 
-      {/* Sentinel div — always mounted so observer can attach; text hidden when no more */}
+      {/* Sentinel div — always mounted so observer can attach */}
       <div ref={sentinelRef} className="py-4 text-center">
         {hasMore && <span className="text-xs text-subtle">↓ scroll for more</span>}
       </div>
