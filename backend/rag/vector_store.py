@@ -11,9 +11,14 @@ Why not Anthropic via OpenAIEmbeddingFunction adapter:
   adapter is incompatible. DefaultEmbeddingFunction produces quality 384-dim
   embeddings suitable for this use case without any external API call.
 """
+import logging
 import os
+from typing import Optional
+
 import chromadb
 from chromadb.utils.embedding_functions import DefaultEmbeddingFunction
+
+logger = logging.getLogger(__name__)
 
 # Resolve path relative to this file so it works regardless of cwd
 _CHROMA_PATH = os.path.join(os.path.dirname(__file__), "..", "chroma_db")
@@ -54,20 +59,50 @@ class VectorStore:
             metadatas=sanitised_meta,
         )
 
-    def query(self, query_text: str, n_results: int = 5) -> list[dict]:
+    def query(
+        self,
+        query_text: str,
+        n_results: int = 5,
+        cuisine_filter: Optional[str] = None,
+        region_filter: Optional[str] = None,
+    ) -> list[dict]:
         """
         Semantic search over the knowledge base.
         Returns list of {text, metadata, distance}.
+
+        When cuisine_filter or region_filter is provided, a ChromaDB where-clause
+        restricts results to matching documents.  Falls back to unfiltered query
+        if the filtered query returns 0 results.
         """
         count = self.collection_size()
         if count == 0:
             return []
         actual_n = min(n_results, count)
-        results = self._collection.query(
-            query_texts=[query_text],
-            n_results=actual_n,
-            include=["documents", "metadatas", "distances"],
-        )
+
+        where = self._build_where(cuisine_filter, region_filter)
+
+        if where:
+            results = self._collection.query(
+                query_texts=[query_text],
+                n_results=actual_n,
+                where=where,
+                include=["documents", "metadatas", "distances"],
+            )
+            docs = results["documents"][0]
+            if not docs:
+                logger.debug(
+                    "Filtered query returned 0 results (cuisine=%s, region=%s) — falling back to unfiltered",
+                    cuisine_filter, region_filter,
+                )
+                where = None  # fall through to unfiltered
+
+        if not where:
+            results = self._collection.query(
+                query_texts=[query_text],
+                n_results=actual_n,
+                include=["documents", "metadatas", "distances"],
+            )
+
         output = []
         docs = results["documents"][0]
         metas = results["metadatas"][0]
@@ -75,6 +110,23 @@ class VectorStore:
         for text, meta, dist in zip(docs, metas, dists):
             output.append({"text": text, "metadata": meta, "distance": dist})
         return output
+
+    @staticmethod
+    def _build_where(
+        cuisine_filter: Optional[str], region_filter: Optional[str]
+    ) -> Optional[dict]:
+        """Build a ChromaDB where-clause from optional filters."""
+        conditions = []
+        if cuisine_filter:
+            conditions.append({"cuisine": {"$eq": cuisine_filter}})
+        if region_filter:
+            conditions.append({"region": {"$eq": region_filter}})
+
+        if not conditions:
+            return None
+        if len(conditions) == 1:
+            return conditions[0]
+        return {"$and": conditions}
 
     def collection_size(self) -> int:
         return self._collection.count()

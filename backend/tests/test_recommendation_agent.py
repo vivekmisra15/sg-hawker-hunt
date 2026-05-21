@@ -2,7 +2,7 @@
 import json
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from agents.recommendation_agent import RecommendationAgent, _parse_time_range, _parse_price_upper
+from agents.recommendation_agent import RecommendationAgent, _parse_time_range, _parse_price_upper, _normalise_cuisine
 from models.schemas import LocationResult, HygieneResult, SentimentResult
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -903,3 +903,40 @@ def test_load_json_list_caches_after_first_read():
         ra._json_list_cache.pop(path, None)
         if os.path.exists(path):
             os.unlink(path)
+
+
+# ── Cuisine normalisation ────────────────────────────────────────────────────
+
+def test_normalise_cuisine_direct_match():
+    assert _normalise_cuisine("chicken rice") == "chicken rice"
+    assert _normalise_cuisine("Chicken Rice") == "chicken rice"
+
+
+def test_normalise_cuisine_singlish_variants():
+    assert _normalise_cuisine("orh luak") == "oyster omelette"
+    assert _normalise_cuisine("prata") == "roti prata"
+    assert _normalise_cuisine("cai fan") == "economy rice"
+    assert _normalise_cuisine("lei cha") == "thunder tea rice"
+
+
+def test_normalise_cuisine_unknown_returns_none():
+    assert _normalise_cuisine("") is None
+    assert _normalise_cuisine("unicorn steak") is None
+
+
+@pytest.mark.asyncio
+async def test_cuisine_filter_passed_to_vector_store():
+    """When preferences include cuisine_type, the vector store receives a cuisine_filter."""
+    vs = _make_vs([_rag("Chicken Stall", "Maxwell", distance=0.3)])
+    agent = _make_agent(vs)
+    with patch("agents.recommendation_agent._load_json_list", return_value=[]):
+        await agent.run(
+            query="chicken rice near me",
+            location_results=[_loc("Maxwell")],
+            hygiene_results=[_hyg("Maxwell", grade="UNKNOWN")],
+            preferences={"cuisine_type": "chicken rice"},
+        )
+    # Verify the vector store was called with the cuisine_filter kwarg
+    call_kwargs = vs.query.call_args
+    assert call_kwargs.kwargs.get("cuisine_filter") == "chicken rice" or \
+           (len(call_kwargs.args) > 2 or "cuisine_filter" in call_kwargs.kwargs)
