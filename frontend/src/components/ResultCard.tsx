@@ -6,12 +6,8 @@ import { StatusBadge } from './StatusBadge';
 interface ResultCardProps {
   recommendation: RankedRecommendation;
   index: number;
-}
-
-function mapsUrl(stallName: string, centreName: string) {
-  return `https://www.google.com/maps/search/?api=1&query=${
-    encodeURIComponent(`${stallName} ${centreName} Singapore`)
-  }`;
+  isSelected?: boolean;
+  onSelect?: (key: string) => void;
 }
 
 function StarRating({ rating }: { rating: number }) {
@@ -46,20 +42,23 @@ function StarRating({ rating }: { rating: number }) {
   );
 }
 
-export const ResultCard = memo(function ResultCard({ recommendation: r, index }: ResultCardProps) {
-  const url = mapsUrl(r.stall_name, r.centre_name);
+export const ResultCard = memo(function ResultCard({ recommendation: r, index, isSelected, onSelect }: ResultCardProps) {
+  const key = `${r.stall_name}::${r.centre_name}`;
 
   function handleClick(e: React.MouseEvent) {
-    // Don't fire if user selects text
     if (window.getSelection()?.toString()) return;
     e.preventDefault();
-    window.open(url, '_blank', 'noopener,noreferrer');
+    if (onSelect) {
+      onSelect(key);
+    }
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      window.open(url, '_blank', 'noopener,noreferrer');
+      if (onSelect) {
+        onSelect(key);
+      }
     }
   }
 
@@ -72,18 +71,19 @@ export const ResultCard = memo(function ResultCard({ recommendation: r, index }:
       onClick={handleClick}
       onKeyDown={handleKeyDown}
       tabIndex={0}
-      role="link"
-      aria-label={`${r.stall_name} at ${r.centre_name} — open in Google Maps`}
-      className="group relative bg-card rounded-xl border border-border hover:border-border-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:border-accent/60 transition-colors p-5 cursor-pointer"
+      role="button"
+      aria-label={`${r.stall_name} at ${r.centre_name} — view details`}
+      aria-pressed={isSelected}
+      data-key={key}
+      className={`group relative bg-card rounded-xl border transition-colors p-5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60
+        ${isSelected
+          ? 'border-accent/60 ring-2 ring-accent/20'
+          : 'border-border hover:border-border-strong'
+        }`}
     >
       {/* Rank — barely visible watermark */}
       <span className="absolute top-4 right-5 text-5xl font-bold text-foreground/[0.06] leading-none select-none tabular">
         {r.rank}
-      </span>
-
-      {/* Maps link hint — subtle always, stronger on hover/focus */}
-      <span className="absolute bottom-4 right-5 text-xs text-subtle opacity-50 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
-        Maps ↗
       </span>
 
       {/* Name + centre */}
@@ -129,8 +129,8 @@ export const ResultCard = memo(function ResultCard({ recommendation: r, index }:
         )}
       </div>
 
-      {/* Reasoning */}
-      <p className="text-sm text-muted italic border-l-2 border-accent/50 pl-3 mt-4 leading-relaxed">
+      {/* Reasoning — first sentence preview */}
+      <p className="text-sm text-muted italic border-l-2 border-accent/50 pl-3 mt-4 leading-relaxed line-clamp-2">
         {r.reasoning}
       </p>
     </motion.div>

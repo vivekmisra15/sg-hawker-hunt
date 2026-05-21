@@ -1108,3 +1108,122 @@ Each cycle selects 3 improvements scored by Impact × Feasibility × Breadth (�
 
 ---
 
+## Session Notes — Milestone 8A: ChromaDB Production Fix (2026-05-21)
+
+### Problem
+
+Render's ephemeral filesystem wipes new writes on redeploy. The `chroma_db/` vector data was
+committed to git (workaround), but the ONNX embedding model (~80MB, all-MiniLM-L6-v2) was
+downloaded at first query time — not at startup. This caused the first search to timeout on Render.
+
+### Solution: Pre-download ONNX model at Render build time
+
+Three changes bake the model into the deployment image:
+
+**`backend/nixpacks.toml`** — Added `[phases.build]` section with two commands:
+1. `pip install -r requirements.txt`
+2. `python -c "from chromadb.utils.embedding_functions import DefaultEmbeddingFunction; ef = DefaultEmbeddingFunction(); ef(['warmup']); print('Embedding model cached.')"` — forces 80MB download during build
+
+**`backend/rag/vector_store.py`** — New `warmup()` method:
+- `self._ef(["warmup"])` — triggers model load at startup (instant if already cached from build)
+
+**`backend/main.py`** — Lifespan calls `vs.warmup()` immediately after `VectorStore()` instantiation:
+- Seeding disabled on production (`ENVIRONMENT=production`) to prevent startup timeout
+- `chroma_db/` data is committed to git and present at startup
+
+### Deployment
+
+- Frontend: Vercel (set `VITE_API_URL` env var to Render backend URL)
+- Backend: Render (auto-deploys from `main` branch via nixpacks)
+
+### Verification
+- `curl https://sg-hawker-hunt.onrender.com/api/health` → 200, all systems ready
+- `POST /api/search {"query":"laksa"}` → 10 ranked stalls, SSE streaming, no timeout
+
+### Test results — Milestone 8A
+- 96/96 passing (no new tests — infrastructure change only)
+
+---
+
+## Session Notes — Milestone 8B: Design Wiki (2026-05-21)
+
+### Part 1: Design Wiki Infrastructure
+
+**New agent: `.claude/agents/design-wiki.md`**
+- Protocol: 3 cycles per run, each cycle SCAN → SCORE → EXECUTE → EXPAND → DOCUMENT
+- Scoring: User Delight × Feasibility × Differentiation (1-5 each)
+- Self-expanding: EXPAND phase discovers sub-patterns from what was just built
+- Trigger: `run design-wiki`
+
+**New directory: `design-wiki/`**
+- `inspirations/` — 4 seed entries with 19 total patterns:
+  - `hotels-com-map.md` (5 patterns): detail panel, card↔pin sync, distance context, time banner, amenity chips
+  - `zillow-map-grid.md` (6 patterns): split pane, grade pins, 2-col grid, viewport counter, map controls, filter bar
+  - `linear-density.md` (5 patterns): tabular nums, opacity hierarchy, subtle borders, keyboard nav, activity indicators
+  - `perplexity-sources.md` (3 patterns): inline citations, collapsible reasoning, structured trace blocks
+- `run-log/` — auto-written after each agent run
+
+### Part 2: Design Wiki Run 01 — 5 patterns implemented
+
+**Cycle 1 — Map interaction (highest delight)**
+
+| Pattern | Score | Implementation |
+|---------|-------|----------------|
+| hotels-02 (card↔pin sync) | 14 | `App.tsx`: `selectedKey` state. `ResultCard`: `onSelect` callback + `isSelected` highlight. `HawkerMap`: `selectedKey` prop + `onMarkerClick` callback. `ResultsList`: scroll-to-card via `data-key` + `scrollIntoView`. |
+| zillow-02 (grade pins) | 14 | `HawkerMap`: markers now show hygiene grade letter (A/B/C/D/—) colour-coded green/amber/red/grey. Selected marker scales 34→42px with glow ring. Replaces rank-number markers. |
+
+**Cycle 2 — Information richness**
+
+| Pattern | Score | Implementation |
+|---------|-------|----------------|
+| hotels-01 (detail panel) | 13 | New `StallDetailPanel.tsx`: slides from right (desktop, max-w-md) / bottom sheet (mobile, 75vh). Rank badge, all status badges, stats grid (distance/rating/score), standout quote, full reasoning, Google Maps CTA. Closes on Escape / outside click / close button. ARIA dialog with modal. |
+
+**Cycle 3 — Filters + context**
+
+| Pattern | Score | Implementation |
+|---------|-------|----------------|
+| zillow-06 (filter strip) | 12 | New `FilterStrip.tsx`: 5 toggle pills (Michelin, Halal, Open now, Grade A, Under $5). Active: filled amber. Inactive: outlined. Client-side filtering in `App.tsx` via `applyFilters()`. Count indicator when filters active. |
+| hotels-04 (time banner) | 12 | `App.tsx`: `getTimeContext()` checks SGT hour (UTC+8). Breakfast 6-11, Lunch 11-15, Dinner 17-21, Supper 21-3. Amber-tinted banner with clock emoji. |
+
+### Interaction model change
+
+`ResultCard` click no longer opens Google Maps directly. Instead:
+- Click → `onSelect(key)` → opens `StallDetailPanel` with full details
+- Google Maps link moved inside the detail panel as a prominent CTA button
+- `role` changed from `"link"` to `"button"`, `aria-pressed` for selected state
+- Reasoning text truncated to 2 lines (`line-clamp-2`) on card; full text in panel
+
+### EXPAND phase — 12 sub-patterns discovered
+
+From detail panel: swipe between stalls, share stall link, panel scroll memory
+From card↔pin sync: hover preview, smooth animated pan
+From grade pins: cluster at low zoom, cuisine label on hover
+From filter strip: count badges, animate transitions, persist to URL
+From time banner: dismiss for session, actionable click-to-filter
+
+### Files changed
+
+| File | Change |
+|------|--------|
+| `frontend/src/App.tsx` | Rewritten — selectedKey, filters, time banner, detail panel, layout wiring |
+| `frontend/src/components/HawkerMap.tsx` | Rewritten — grade-coloured pins, selectedKey, onMarkerClick, exported `markerKey` |
+| `frontend/src/components/ResultCard.tsx` | Modified — onSelect, isSelected, data-key, line-clamp, role=button |
+| `frontend/src/components/ResultsList.tsx` | Modified — selectedKey, onSelect passthrough, scroll-to-card, SVG empty state |
+| `frontend/src/components/StallDetailPanel.tsx` | **New** — slide-in detail panel |
+| `frontend/src/components/FilterStrip.tsx` | **New** — filter toggle pills with FilterKey type |
+| `design-wiki/` | **New** — full directory structure with 4 inspirations + run log |
+| `.claude/agents/design-wiki.md` | **New** — agent definition |
+
+### Test results — Milestone 8B
+- 96/96 backend tests passing (no backend changes this milestone)
+- Frontend build: zero TypeScript errors, 478 KB JS bundle
+- Run log: `design-wiki/run-log/2026-05-21-run-01.md`
+
+### Carry-forward to Design Wiki Run 02
+- zillow-01 (persistent 50/50 split pane) — partially done, not true 50/50
+- zillow-03 (2-column card grid)
+- zillow-05 (floating map controls)
+- perplexity-02 (collapsible reasoning with expand toggle)
+- linear-04 (keyboard navigation j/k/Enter/Escape)
+- 12 sub-patterns from Run 01 EXPAND phase
+

@@ -6,11 +6,20 @@ import { useTheme } from '../context/ThemeContext';
 
 interface HawkerMapProps {
   recommendations: RankedRecommendation[];
+  selectedKey?: string | null;
+  onMarkerClick?: (key: string) => void;
 }
 
 const LIGHT_TILES = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
 const DARK_TILES  = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
 const TILE_ATTR   = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
+
+const GRADE_COLORS: Record<string, string> = {
+  A: '#16a34a',
+  B: '#d97706',
+  C: '#dc2626',
+  D: '#dc2626',
+};
 
 function withCoords(recs: RankedRecommendation[]) {
   return recs.filter(r => r.lat != null && r.lng != null);
@@ -22,36 +31,50 @@ function mapsUrl(stallName: string, centreName: string) {
   }`;
 }
 
-function makeMarkerIcon(rank: number): L.DivIcon {
+function makeMarkerIcon(rec: RankedRecommendation, isSelected: boolean): L.DivIcon {
+  const grade = rec.hygiene_grade;
+  const color = GRADE_COLORS[grade] ?? '#737373';
+  const label = grade === 'UNKNOWN' ? '—' : grade;
+  const size = isSelected ? 42 : 34;
+  const borderWidth = isSelected ? 3 : 2;
+  const fontSize = isSelected ? 16 : 13;
+  const shadow = isSelected
+    ? `box-shadow:0 0 0 4px ${color}40, 0 4px 12px rgba(0,0,0,0.4);`
+    : 'box-shadow:0 2px 8px rgba(0,0,0,0.35);';
+
   return L.divIcon({
     className: '',
-    iconSize: [34, 34],
-    iconAnchor: [17, 34],
-    popupAnchor: [0, -36],
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size],
+    popupAnchor: [0, -size - 2],
     html: `
       <div style="
-        width:34px;height:34px;border-radius:50%;
-        background:#f59e0b;color:#000;
+        width:${size}px;height:${size}px;border-radius:50%;
+        background:${color};color:#fff;
         display:flex;align-items:center;justify-content:center;
         font-family:Geist,DM Sans,system-ui,sans-serif;
-        font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;
-        box-shadow:0 2px 8px rgba(0,0,0,0.35);
-        border:2px solid rgba(255,255,255,0.6);
-      ">${rank}</div>
+        font-size:${fontSize}px;font-weight:700;font-variant-numeric:tabular-nums;
+        ${shadow}
+        border:${borderWidth}px solid rgba(255,255,255,0.85);
+        transition:all 0.2s ease;
+        z-index:${isSelected ? 1000 : 'auto'};
+      ">${label}</div>
     `,
   });
 }
 
-function markerKey(rec: RankedRecommendation): string {
+export function markerKey(rec: RankedRecommendation): string {
   return `${rec.stall_name}::${rec.centre_name}`;
 }
 
-export function HawkerMap({ recommendations }: HawkerMapProps) {
+export function HawkerMap({ recommendations, selectedKey, onMarkerClick }: HawkerMapProps) {
   const { theme } = useTheme();
   const mapRef = useRef<L.Map | null>(null);
   const tileRef = useRef<L.TileLayer | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const markersRef = useRef<Map<string, L.Marker>>(new Map());
+  const onMarkerClickRef = useRef(onMarkerClick);
+  onMarkerClickRef.current = onMarkerClick;
 
   const mapped = withCoords(recommendations);
 
@@ -98,11 +121,9 @@ export function HawkerMap({ recommendations }: HawkerMapProps) {
       ? `<span style="color:#f59e0b">★</span> ${rec.google_rating.toFixed(1)}${rec.review_count ? ` <span style="opacity:.6">(${rec.review_count.toLocaleString()})</span>` : ''}`
       : '';
 
-    const gradeColor: Record<string, string> = {
-      A: '#16a34a', B: '#d97706', C: '#dc2626', D: '#dc2626',
-    };
+    const gradeColor = GRADE_COLORS[rec.hygiene_grade] ?? '#737373';
     const gradeHtml = rec.hygiene_grade !== 'UNKNOWN'
-      ? `<span style="color:${gradeColor[rec.hygiene_grade] ?? '#737373'}">Grade ${rec.hygiene_grade}</span>`
+      ? `<span style="color:${gradeColor}">Grade ${rec.hygiene_grade}</span>`
       : '';
 
     const distHtml = rec.distance_km < 99
@@ -149,16 +170,19 @@ export function HawkerMap({ recommendations }: HawkerMapProps) {
       const lng = rec.lng!;
       bounds.push([lat, lng]);
 
+      const isSelected = key === selectedKey;
       const existing = prevMarkers.get(key);
+
       if (existing) {
-        // Update position and popup if marker already exists
         existing.setLatLng([lat, lng]);
-        existing.setIcon(makeMarkerIcon(rec.rank));
+        existing.setIcon(makeMarkerIcon(rec, isSelected));
         existing.setPopupContent(buildPopup(rec));
       } else {
-        // Create new marker
-        const marker = L.marker([lat, lng], { icon: makeMarkerIcon(rec.rank) });
+        const marker = L.marker([lat, lng], { icon: makeMarkerIcon(rec, isSelected) });
         marker.bindPopup(buildPopup(rec), { maxWidth: 260 });
+        marker.on('click', () => {
+          onMarkerClickRef.current?.(key);
+        });
         marker.addTo(map);
         prevMarkers.set(key, marker);
       }
@@ -167,7 +191,17 @@ export function HawkerMap({ recommendations }: HawkerMapProps) {
     if (bounds.length > 0) {
       map.fitBounds(bounds, { padding: [48, 48], maxZoom: 15 });
     }
-  }, [recommendations, buildPopup]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [recommendations, selectedKey, buildPopup]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // When selectedKey changes, open the popup for the selected marker
+  useEffect(() => {
+    if (!selectedKey || !mapRef.current) return;
+    const marker = markersRef.current.get(selectedKey);
+    if (marker) {
+      marker.openPopup();
+      mapRef.current.panTo(marker.getLatLng(), { animate: true, duration: 0.3 });
+    }
+  }, [selectedKey]);
 
   if (mapped.length === 0) return null;
 
