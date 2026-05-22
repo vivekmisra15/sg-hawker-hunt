@@ -26,6 +26,10 @@ from pathlib import Path
 
 import anthropic
 import httpx
+from dotenv import load_dotenv
+
+# Load .env from project root
+load_dotenv(Path(__file__).parent.parent.parent / ".env")
 
 # Ensure backend/ is on path
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -196,6 +200,18 @@ async def generate_description(
         return f"A popular hawker stall at {centre_name} serving local dishes."
 
 
+def _extract_json(raw: str) -> dict:
+    """Extract JSON from a response that may be wrapped in markdown code blocks."""
+    text = raw.strip()
+    # Strip ```json ... ``` or ``` ... ```
+    if text.startswith("```"):
+        lines = text.split("\n")
+        # Remove first line (```json) and last line (```)
+        lines = [l for l in lines if not l.strip().startswith("```")]
+        text = "\n".join(lines).strip()
+    return json.loads(text)
+
+
 async def classify_cuisine(
     client: anthropic.AsyncAnthropic, stall_name: str
 ) -> dict:
@@ -205,10 +221,10 @@ async def classify_cuisine(
             model="claude-haiku-4-5-20251001",
             max_tokens=200,
             system=_CUISINE_SYSTEM,
-            messages=[{"role": "user", "content": stall_name}],
+            messages=[{"role": "user", "content": f"Classify this Singapore hawker stall: {stall_name}"}],
         )
         raw = response.content[0].text.strip()
-        return json.loads(raw)
+        return _extract_json(raw)
     except Exception as e:
         logger.warning("Cuisine classification failed for %s: %s", stall_name, e)
         return {
