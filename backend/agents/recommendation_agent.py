@@ -26,7 +26,7 @@ import time
 from datetime import datetime
 from typing import Optional
 
-import anthropic
+from tools.inference_client import InferenceClient
 import pytz
 
 from models.schemas import LocationResult, HygieneResult, RankedRecommendation, SentimentResult
@@ -275,10 +275,10 @@ class RecommendationAgent:
     def __init__(
         self,
         vector_store: VectorStore | None = None,
-        anthropic_client: anthropic.AsyncAnthropic | None = None,
+        inference_client: InferenceClient | None = None,
     ):
         self._vs = vector_store or VectorStore()
-        self._anthropic = anthropic_client or anthropic.AsyncAnthropic()
+        self._inference = inference_client or InferenceClient()
 
     async def run(
         self,
@@ -515,13 +515,12 @@ class RecommendationAgent:
                 return result
 
         try:
-            response = await self._anthropic.messages.create(
-                model="claude-haiku-4-5-20251001",
-                max_tokens=256,
+            raw = await self._inference.complete(
+                call_type="sentiment",
                 system=_SENTIMENT_SYSTEM,
-                messages=[{"role": "user", "content": reviews_summary[:2000]}],
+                user_content=reviews_summary[:2000],
+                max_tokens=256,
             )
-            raw = response.content[0].text.strip()
             if not raw:
                 logger.debug("Empty Haiku response for sentiment — using neutral")
                 result = _NEUTRAL_SENTIMENT

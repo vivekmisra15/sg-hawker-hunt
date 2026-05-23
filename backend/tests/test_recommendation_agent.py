@@ -13,16 +13,15 @@ def _make_vs(rag_docs: list[dict]):
     return mock
 
 
-def _make_anthropic(sentiment: SentimentResult | None = None):
-    """Return a mock Anthropic client that yields a fixed sentiment JSON response."""
-    client = AsyncMock()
+def _make_inference_client(sentiment: SentimentResult | None = None):
+    """Return a mock InferenceClient whose complete() returns a fixed sentiment JSON."""
+    mock = MagicMock()
     if sentiment is not None:
-        # Serialise all fields so new fields (peak_time_hint, price_signal) are included
         payload = sentiment.model_dump_json()
-        msg = MagicMock()
-        msg.content = [MagicMock(text=payload)]
-        client.messages.create = AsyncMock(return_value=msg)
-    return client
+        mock.complete = AsyncMock(return_value=payload)
+    else:
+        mock.complete = AsyncMock(return_value='{}')
+    return mock
 
 
 def _loc(
@@ -79,10 +78,10 @@ def _rag(
     }
 
 
-def _make_agent(vs, anthropic_client=None):
-    if anthropic_client is None:
-        anthropic_client = _make_anthropic()
-    return RecommendationAgent(vector_store=vs, anthropic_client=anthropic_client)
+def _make_agent(vs, inference_client=None):
+    if inference_client is None:
+        inference_client = _make_inference_client()
+    return RecommendationAgent(vector_store=vs, inference_client=inference_client)
 
 
 # ── original base tests ───────────────────────────────────────────────────────
@@ -278,8 +277,8 @@ async def test_signal1_missing_rating_no_change():
 @pytest.mark.asyncio
 async def test_signal2_positive_sentiment_boosts():
     vs = _make_vs([_rag("Stall A", "Maxwell", distance=0.3), _rag("Stall B", "Newton", distance=0.3)])
-    positive = _make_anthropic(SentimentResult(sentiment_score=0.8, standout_quote="Absolutely delicious!"))
-    agent = _make_agent(vs, anthropic_client=positive)
+    positive = _make_inference_client(SentimentResult(sentiment_score=0.8, standout_quote="Absolutely delicious!"))
+    agent = _make_agent(vs, inference_client=positive)
     with patch("agents.recommendation_agent._load_json_list", return_value=[]):
         # Both have reviews so sentiment fires for both; Maxwell gets +0.8
         results = await agent.run(
@@ -299,10 +298,10 @@ async def test_signal2_positive_sentiment_boosts():
 @pytest.mark.asyncio
 async def test_signal2_hygiene_concern_penalises():
     vs = _make_vs([_rag("Dirty Stall", "Maxwell", distance=0.3)])
-    concern = _make_anthropic(SentimentResult(
+    concern = _make_inference_client(SentimentResult(
         sentiment_score=0.0, hygiene_concerns=True, standout_quote=""
     ))
-    agent = _make_agent(vs, anthropic_client=concern)
+    agent = _make_agent(vs, inference_client=concern)
     with patch("agents.recommendation_agent._load_json_list", return_value=[]):
         results = await agent.run(
             query="food",
@@ -318,9 +317,9 @@ async def test_signal2_hygiene_concern_penalises():
 @pytest.mark.asyncio
 async def test_signal2_haiku_failure_graceful():
     vs = _make_vs([_rag("Stall A", "Maxwell", distance=0.3)])
-    failing_client = AsyncMock()
-    failing_client.messages.create = AsyncMock(side_effect=Exception("API timeout"))
-    agent = _make_agent(vs, anthropic_client=failing_client)
+    failing_client = MagicMock()
+    failing_client.complete = AsyncMock(side_effect=Exception("API timeout"))
+    agent = _make_agent(vs, inference_client=failing_client)
     with patch("agents.recommendation_agent._load_json_list", return_value=[]):
         results = await agent.run(
             query="food",
@@ -335,8 +334,8 @@ async def test_signal2_haiku_failure_graceful():
 @pytest.mark.asyncio
 async def test_signal2_empty_reviews_skips_llm():
     vs = _make_vs([_rag("Stall A", "Maxwell", distance=0.3)])
-    client = _make_anthropic()
-    agent = _make_agent(vs, anthropic_client=client)
+    client = _make_inference_client()
+    agent = _make_agent(vs, inference_client=client)
     with patch("agents.recommendation_agent._load_json_list", return_value=[]):
         await agent.run(
             query="food",
@@ -344,16 +343,16 @@ async def test_signal2_empty_reviews_skips_llm():
             hygiene_results=[_hyg("Maxwell")],
             preferences={},
         )
-    # No reviews → no Haiku call
-    client.messages.create.assert_not_called()
+    # No reviews → no LLM call
+    client.complete.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_signal2_cache_hit_no_api_call():
     import agents.recommendation_agent as ra
     vs = _make_vs([_rag("Stall A", "Maxwell", distance=0.3)])
-    client = _make_anthropic(SentimentResult(sentiment_score=0.5))
-    agent = _make_agent(vs, anthropic_client=client)
+    client = _make_inference_client(SentimentResult(sentiment_score=0.5))
+    agent = _make_agent(vs, inference_client=client)
     reviews = "Tasty hawker food."
     # Clear cache first
     ra._SENTIMENT_CACHE.clear()
@@ -364,7 +363,7 @@ async def test_signal2_cache_hit_no_api_call():
             hygiene_results=[_hyg("Maxwell")],
             preferences={},
         )
-        call_count_first = client.messages.create.call_count
+        call_count_first = client.complete.call_count
         await agent.run(
             query="food",
             location_results=[_loc("Maxwell", reviews_summary=reviews)],
@@ -372,7 +371,7 @@ async def test_signal2_cache_hit_no_api_call():
             preferences={},
         )
     # Second run should hit cache — call count unchanged
-    assert client.messages.create.call_count == call_count_first
+    assert client.complete.call_count == call_count_first
 
 
 # ── Signal 3: time-aware ──────────────────────────────────────────────────────
@@ -640,10 +639,10 @@ async def test_signal3a_peak_time_hint_matches_time_context_boosts():
          "metadata": {**_rag("Baseline", "Newton", distance=0.3)["metadata"],
                       "cuisine": "rojak", "tags": "mixed fruit nuts"}},
     ])
-    lunch_sentiment = _make_anthropic(SentimentResult(
+    lunch_sentiment = _make_inference_client(SentimentResult(
         sentiment_score=0.0, peak_time_hint="lunch"
     ))
-    agent = _make_agent(vs, anthropic_client=lunch_sentiment)
+    agent = _make_agent(vs, inference_client=lunch_sentiment)
     with patch("agents.recommendation_agent._load_json_list", return_value=[]):
         results = await agent.run(
             query="lunch food",
@@ -665,10 +664,10 @@ async def test_signal3a_peak_time_hint_matches_time_context_boosts():
 async def test_signal3a_mismatched_peak_time_hint_no_boost():
     """Haiku says 'best at breakfast'; user wants supper → no boost (no match)."""
     vs = _make_vs([_rag("Brekkie Stall", "Maxwell", distance=0.3)])
-    breakfast_sentiment = _make_anthropic(SentimentResult(
+    breakfast_sentiment = _make_inference_client(SentimentResult(
         sentiment_score=0.0, peak_time_hint="breakfast"
     ))
-    agent = _make_agent(vs, anthropic_client=breakfast_sentiment)
+    agent = _make_agent(vs, inference_client=breakfast_sentiment)
     with patch("agents.recommendation_agent._load_json_list", return_value=[]):
         results_supper = await agent.run(
             query="supper",
@@ -802,10 +801,10 @@ async def test_signal5b_review_price_signal_used_as_fallback():
         _rag("Value Stall", "Maxwell", distance=0.3),  # no price_range
         _rag("Baseline", "Newton", distance=0.3),
     ])
-    cheap_sentiment = _make_anthropic(SentimentResult(
+    cheap_sentiment = _make_inference_client(SentimentResult(
         sentiment_score=0.0, price_signal="cheap"
     ))
-    agent = _make_agent(vs, anthropic_client=cheap_sentiment)
+    agent = _make_agent(vs, inference_client=cheap_sentiment)
     with patch("agents.recommendation_agent._load_json_list", return_value=[]):
         results = await agent.run(
             query="cheap food",

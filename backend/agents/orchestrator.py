@@ -7,12 +7,11 @@ import json
 import logging
 from typing import AsyncGenerator
 
-import anthropic
-
 from agents.hygiene_agent import HygieneAgent
 from agents.location_agent import LocationAgent
 from agents.recommendation_agent import RecommendationAgent
 from models.schemas import AgentEvent, SearchRequest
+from tools.inference_client import InferenceClient
 from tools.onemap_client import OneMapClient
 
 logger = logging.getLogger(__name__)
@@ -49,13 +48,13 @@ class OrchestratorAgent:
         location_agent: LocationAgent | None = None,
         hygiene_agent: HygieneAgent | None = None,
         recommendation_agent: RecommendationAgent | None = None,
-        anthropic_client: anthropic.AsyncAnthropic | None = None,
+        inference_client: InferenceClient | None = None,
         onemap_client: OneMapClient | None = None,
     ):
         self._location = location_agent or LocationAgent()
         self._hygiene = hygiene_agent or HygieneAgent()
         self._recommendation = recommendation_agent or RecommendationAgent()
-        self._anthropic = anthropic_client or anthropic.AsyncAnthropic()
+        self._inference = inference_client or InferenceClient()
         self._onemap = onemap_client or OneMapClient()
 
     async def run(self, request: SearchRequest) -> AsyncGenerator[AgentEvent, None]:
@@ -142,15 +141,14 @@ class OrchestratorAgent:
         )
 
     async def _parse_query(self, query: str) -> dict:
-        """Use Claude to extract structured preferences from free-text query."""
+        """Use LLM to extract structured preferences from free-text query."""
         try:
-            response = await self._anthropic.messages.create(
-                model="claude-sonnet-4-6",
-                max_tokens=256,
+            raw = await self._inference.complete(
+                call_type="orchestrator",
                 system=_PARSE_SYSTEM,
-                messages=[{"role": "user", "content": query}],
+                user_content=query,
+                max_tokens=256,
             )
-            raw = response.content[0].text.strip()
             return json.loads(raw)
         except Exception as e:
             logger.warning("Query parse failed (%s) — using defaults", e)

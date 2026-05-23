@@ -13,24 +13,18 @@ from models.schemas import (
 )
 
 
-def _mock_anthropic_client():
-    """Return a mock AsyncAnthropic that returns a valid query parse."""
-    content_block = MagicMock()
-    content_block.text = json.dumps({
+def _mock_inference_client():
+    """Return a mock InferenceClient whose complete() returns a valid query parse."""
+    mock = MagicMock()
+    mock.complete = AsyncMock(return_value=json.dumps({
         "cuisine_type": "chicken rice",
         "location_hint": "Maxwell",
         "dietary": [],
         "avoid": [],
         "budget": "any",
         "time_context": "any",
-    })
-    mock_response = MagicMock()
-    mock_response.content = [content_block]
-    mock_messages = MagicMock()
-    mock_messages.create = AsyncMock(return_value=mock_response)
-    mock_client = MagicMock()
-    mock_client.messages = mock_messages
-    return mock_client
+    }))
+    return mock
 
 
 def _mock_location_agent():
@@ -91,7 +85,7 @@ def _get_test_client():
         location_agent=_mock_location_agent(),
         hygiene_agent=_mock_hygiene_agent(),
         recommendation_agent=_mock_recommendation_agent(),
-        anthropic_client=_mock_anthropic_client(),
+        inference_client=_mock_inference_client(),
     )
     original = main.orchestrator
     main.orchestrator = mocked_orchestrator

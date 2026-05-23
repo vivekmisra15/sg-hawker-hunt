@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from sse_starlette.sse import EventSourceResponse
+from tools.inference_client import InferenceClient
 from agents.orchestrator import OrchestratorAgent
 from models.schemas import SearchRequest
 from rag.vector_store import VectorStore
@@ -72,6 +73,9 @@ app.add_middleware(
 orchestrator = OrchestratorAgent()
 
 
+_inference_status = InferenceClient()
+
+
 @app.get("/api/health")
 async def health():
     return {
@@ -79,6 +83,9 @@ async def health():
         "orchestrator": "ready",
         "agents": ["orchestrator", "hygiene", "location", "recommendation"],
         "data_sources": ["nea", "google_places", "onemap", "openweather", "chromadb"],
+        "llm_provider": _inference_status.active_provider,
+        "openrouter_configured": _inference_status.openrouter_configured,
+        "anthropic_configured": _inference_status.anthropic_configured,
     }
 
 
