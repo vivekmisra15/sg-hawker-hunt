@@ -1319,3 +1319,71 @@ python -m tools.data_pipeline                           # full run (~120 centres
 - `test_sequence_matcher_matches_bedok_variants` — SequenceMatcher catches near-misses
 - `test_name_similarity_rejects_unrelated` — unrelated names score below threshold
 
+---
+
+## Session Notes — OpenRouter Integration (2026-05-23)
+
+### Problem
+All LLM calls (orchestrator query parsing + sentiment analysis) went through Anthropic SDK,
+incurring real costs per request. Free-tier models on OpenRouter can handle these structured
+JSON extraction tasks adequately.
+
+### Solution: Central inference abstraction with OpenRouter primary + Anthropic fallback
+
+**New file: `backend/tools/inference_client.py`**
+- `InferenceClient` class: single `complete(call_type, system, user_content)` method
+- `InferenceError` exception: raised only when both providers fail
+- `_clean_response()`: strips `<think>...</think>` blocks from Nemotron, extracts `{...}` JSON
+- Properties: `active_provider`, `openrouter_configured`, `anthropic_configured`
+
+**Model routing:**
+
+| Call type | OpenRouter (primary) | Anthropic (fallback) |
+|-----------|---------------------|---------------------|
+| orchestrator | `nvidia/nemotron-3-super-120b-a12b:free` | `claude-sonnet-4-6` |
+| sentiment | `nvidia/llama-3.3-nemotron-super-49b-v1:free` | `claude-haiku-4-5-20251001` |
+
+**OpenRouter integration:**
+- Uses `openai` Python SDK pointed at `https://openrouter.ai/api/v1`
+- Required headers: `HTTP-Referer` (from `FRONTEND_URL` env var) and `X-Title: Hawker Hunt`
+- `openai>=1.40.0` added to `requirements.txt`
+
+**Fallback triggers (any of these → silent fallback to Anthropic):**
+- Missing `OPENROUTER_API_KEY` → OpenRouter skipped entirely
+- HTTP 429 rate limit, HTTP 5xx server error, timeout, any unhandled exception
+- All triggers log at WARNING level
+
+**Nemotron response cleaning:**
+- `<think>...</think>` blocks stripped via regex (Nemotron emits reasoning tokens)
+- If result isn't valid JSON, first `{...}` block extracted via regex
+- If no JSON found, raw text returned (caller's `json.loads` fails and uses defaults)
+
+### Agent changes
+
+**`backend/agents/orchestrator.py`:**
+- `import anthropic` removed; `from tools.inference_client import InferenceClient` added
+- Constructor: `anthropic_client` → `inference_client: InferenceClient | None`
+- `_parse_query()`: `self._anthropic.messages.create(...)` → `self._inference.complete("orchestrator", ...)`
+
+**`backend/agents/recommendation_agent.py`:**
+- Same pattern: `anthropic_client` → `inference_client`
+- `_analyse_sentiment()`: `self._anthropic.messages.create(...)` → `self._inference.complete("sentiment", ...)`
+- Cache, eviction, and error handling unchanged
+
+**`backend/main.py`:**
+- `/api/health` now reports `llm_provider`, `openrouter_configured`, `anthropic_configured`
+
+### Data pipeline not changed
+`backend/tools/data_pipeline.py` (CLI batch tool) still uses Anthropic directly — it's a
+one-off tool for knowledge base expansion, not part of the runtime request path.
+
+### New env var
+`OPENROUTER_API_KEY` added to `.env.example` with comment.
+
+### Test results — OpenRouter Integration
+- 122/122 passing (+16 new tests, 0 regressions)
+- New `test_inference_client.py`: 16 tests covering success path, think tag stripping,
+  JSON extraction, all fallback triggers, both-fail error, model routing, provider properties
+- All existing agent tests updated: `anthropic_client=` → `inference_client=`
+- Mock pattern: `_mock_inference_client(response_json)` returns mock with `complete = AsyncMock`
+

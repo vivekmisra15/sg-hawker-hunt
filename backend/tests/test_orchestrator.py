@@ -8,19 +8,11 @@ from models.schemas import (
 
 # ── fixtures / helpers ────────────────────────────────────────────────────────
 
-def _mock_anthropic_client(response_json: str):
-    """Returns a mock AsyncAnthropic whose messages.create returns response_json."""
-    content_block = MagicMock()
-    content_block.text = response_json
-    mock_response = MagicMock()
-    mock_response.content = [content_block]
-
-    mock_messages = MagicMock()
-    mock_messages.create = AsyncMock(return_value=mock_response)
-
-    mock_client = MagicMock()
-    mock_client.messages = mock_messages
-    return mock_client
+def _mock_inference_client(response_json: str):
+    """Returns a mock InferenceClient whose complete() returns response_json."""
+    mock = MagicMock()
+    mock.complete = AsyncMock(return_value=response_json)
+    return mock
 
 
 def _mock_location_agent(results=None):
@@ -80,7 +72,7 @@ async def test_yields_agent_events_in_correct_order():
         location_agent=_mock_location_agent(),
         hygiene_agent=_mock_hygiene_agent(),
         recommendation_agent=_mock_recommendation_agent(),
-        anthropic_client=_mock_anthropic_client(_PARSE_RESPONSE),
+        inference_client=_mock_inference_client(_PARSE_RESPONSE),
     )
     request = SearchRequest(query="chicken rice near Maxwell", lat=1.2805, lng=103.8446)
     events = [e async for e in orchestrator.run(request)]
@@ -98,7 +90,7 @@ async def test_final_event_is_result_with_recommendations():
         location_agent=_mock_location_agent(),
         hygiene_agent=_mock_hygiene_agent(),
         recommendation_agent=_mock_recommendation_agent(),
-        anthropic_client=_mock_anthropic_client(_PARSE_RESPONSE),
+        inference_client=_mock_inference_client(_PARSE_RESPONSE),
     )
     request = SearchRequest(query="chicken rice", lat=1.2805, lng=103.8446)
     events = [e async for e in orchestrator.run(request)]
@@ -118,7 +110,7 @@ async def test_yields_error_event_when_location_agent_raises():
         location_agent=mock_loc,
         hygiene_agent=_mock_hygiene_agent(),
         recommendation_agent=_mock_recommendation_agent(),
-        anthropic_client=_mock_anthropic_client(_PARSE_RESPONSE),
+        inference_client=_mock_inference_client(_PARSE_RESPONSE),
     )
     request = SearchRequest(query="food", lat=51.5, lng=-0.1)  # London
     events = [e async for e in orchestrator.run(request)]
@@ -134,7 +126,7 @@ async def test_uses_default_singapore_coords_when_no_location_provided():
         location_agent=_mock_location_agent(),
         hygiene_agent=_mock_hygiene_agent(),
         recommendation_agent=_mock_recommendation_agent(),
-        anthropic_client=_mock_anthropic_client(
+        inference_client=_mock_inference_client(
             '{"cuisine_type":"laksa","location_hint":"","dietary":[],"avoid":[]}'
         ),
     )
@@ -155,7 +147,7 @@ async def test_outer_run_catches_unexpected_exception_and_yields_error():
         location_agent=_mock_location_agent(),
         hygiene_agent=_mock_hygiene_agent(),
         recommendation_agent=mock_rec,
-        anthropic_client=_mock_anthropic_client(_PARSE_RESPONSE),
+        inference_client=_mock_inference_client(_PARSE_RESPONSE),
     )
     request = SearchRequest(query="chicken rice", lat=1.2805, lng=103.8446)
     events = [e async for e in orchestrator.run(request)]
@@ -168,25 +160,23 @@ async def test_outer_run_catches_unexpected_exception_and_yields_error():
 
 @pytest.mark.asyncio
 async def test_outer_run_catches_query_parse_crash():
-    """If the query parse itself crashes (e.g. Anthropic API down),
-    the outer run() should still yield an error event."""
-    mock_client = MagicMock()
-    mock_client.messages = MagicMock()
-    mock_client.messages.create = AsyncMock(
-        side_effect=RuntimeError("Anthropic API unreachable")
+    """If the inference client itself crashes, _parse_query returns defaults
+    and the flow continues to completion."""
+    mock_ic = MagicMock()
+    mock_ic.complete = AsyncMock(
+        side_effect=RuntimeError("Both providers down")
     )
     orchestrator = OrchestratorAgent(
         location_agent=_mock_location_agent(),
         hygiene_agent=_mock_hygiene_agent(),
         recommendation_agent=_mock_recommendation_agent(),
-        anthropic_client=mock_client,
+        inference_client=mock_ic,
     )
     request = SearchRequest(query="food", lat=1.2805, lng=103.8446)
     events = [e async for e in orchestrator.run(request)]
 
     # The parse failure should be caught by the inner try in _parse_query,
     # which returns defaults — so the flow should continue to completion
-    # (it does NOT propagate to the outer run wrapper in this case)
     result_events = [e for e in events if e.type == "result"]
     assert len(result_events) >= 1
 
@@ -200,7 +190,7 @@ async def test_reuses_injected_onemap_client_for_geocode():
         location_agent=_mock_location_agent(),
         hygiene_agent=_mock_hygiene_agent(),
         recommendation_agent=_mock_recommendation_agent(),
-        anthropic_client=_mock_anthropic_client(
+        inference_client=_mock_inference_client(
             '{"cuisine_type":"laksa","location_hint":"Toa Payoh","dietary":[],"avoid":[]}'
         ),
         onemap_client=mock_onemap,
