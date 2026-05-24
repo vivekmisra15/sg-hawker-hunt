@@ -26,7 +26,7 @@ MODEL_MAP: dict[str, dict[str, str]] = {
         "anthropic": "claude-sonnet-4-6",
     },
     "sentiment": {
-        "openrouter": "nvidia/llama-3.3-nemotron-super-49b-v1:free",
+        "openrouter": "nvidia/nemotron-3-nano-30b-a3b:free",
         "anthropic": "claude-haiku-4-5-20251001",
     },
 }
@@ -163,7 +163,36 @@ class InferenceClient:
 # ── Response cleaning (module-level, stateless) ─────────────────────────
 
 _THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
-_JSON_OBJECT_RE = re.compile(r"\{[^{}]*\}")
+
+
+def _extract_json_block(text: str) -> str | None:
+    """Extract the first top-level {...} JSON block, handling nesting."""
+    start = text.find("{")
+    if start == -1:
+        return None
+    depth = 0
+    in_string = False
+    escape = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if escape:
+            escape = False
+            continue
+        if ch == "\\":
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+    return None
 
 
 def _clean_response(raw: str) -> str:
@@ -177,10 +206,10 @@ def _clean_response(raw: str) -> str:
     except (json.JSONDecodeError, ValueError):
         pass
 
-    # Try extracting the first {...} block
-    match = _JSON_OBJECT_RE.search(cleaned)
-    if match:
-        return match.group(0)
+    # Try extracting the first {...} JSON block (handles nesting + multiline)
+    block = _extract_json_block(cleaned)
+    if block:
+        return block
 
     # Return as-is — caller's json.loads will fail and use defaults
     return cleaned
