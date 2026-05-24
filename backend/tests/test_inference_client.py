@@ -1,5 +1,6 @@
 """Tests for the centralised InferenceClient — OpenRouter + Anthropic fallback."""
 
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -64,6 +65,14 @@ def test_clean_response_strips_multiline_think_tags():
 def test_clean_response_extracts_json_from_surrounding_text():
     raw = 'Here is the result: {"key": "val"} hope this helps!'
     assert _clean_response(raw) == '{"key": "val"}'
+
+
+def test_clean_response_extracts_multiline_nested_json():
+    raw = 'Here is the parsed query:\n{\n  "cuisine_type": "laksa",\n  "dietary": ["halal"]\n}\nHope this helps!'
+    result = _clean_response(raw)
+    parsed = json.loads(result)
+    assert parsed["cuisine_type"] == "laksa"
+    assert parsed["dietary"] == ["halal"]
 
 
 def test_clean_response_returns_valid_json_unchanged():
