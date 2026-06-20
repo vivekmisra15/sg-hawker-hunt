@@ -1,0 +1,166 @@
+{
+  "version": 1,
+  "last_updated": "2026-06-20T00:00:00+08:00",
+  "iteration": 0,
+  "dimensions": {
+    "frontend_test_coverage": {
+      "current_level": 1,
+      "target_level": 4,
+      "gap": 3,
+      "measurements": {
+        "test_count": 0,
+        "coverage_pct": 0,
+        "framework_configured": true,
+        "vitest_installed": true
+      },
+      "last_worked": null,
+      "consecutive_attempts": 0,
+      "history": [
+        [0, 1, 0, "Baseline measurement: Vitest installed but no test files"]
+      ]
+    },
+    "design_pattern_coverage": {
+      "current_level": 2,
+      "target_level": 4,
+      "gap": 2,
+      "measurements": {
+        "patterns_applied": 5,
+        "patterns_total": 19
+      },
+      "last_worked": null,
+      "consecutive_attempts": 0,
+      "history": [
+        [0, 2, 0, "Baseline: 5/19 patterns applied from Design Wiki Run 01"]
+      ]
+    },
+    "information_architecture": {
+      "current_level": 2,
+      "target_level": 4,
+      "gap": 2,
+      "measurements": {
+        "collapsible_sections": false,
+        "source_citations": false
+      },
+      "last_worked": null,
+      "consecutive_attempts": 0,
+      "history": [
+        [0, 2, 0, "Baseline: reasoning shown but not collapsible, no citations"]
+      ]
+    },
+    "api_robustness": {
+      "current_level": 2,
+      "target_level": 4,
+      "gap": 2,
+      "measurements": {
+        "rate_limit_tests": false,
+        "concurrent_tests": false
+      },
+      "last_worked": null,
+      "consecutive_attempts": 0,
+      "history": [
+        [0, 2, 0, "Baseline: error handling present, no rate-limit/concurrent tests"]
+      ]
+    },
+    "backend_test_coverage": {
+      "current_level": 3,
+      "target_level": 4,
+      "gap": 1,
+      "measurements": {
+        "test_count": 123,
+        "coverage_pct": 79
+      },
+      "last_worked": null,
+      "consecutive_attempts": 0,
+      "history": [
+        [0, 3, 0, "Baseline: 123 tests, 79% coverage"]
+      ]
+    },
+    "accessibility": {
+      "current_level": 3,
+      "target_level": 4,
+      "gap": 1,
+      "measurements": {
+        "aria_labels": true,
+        "keyboard_nav": true,
+        "reduced_motion": true,
+        "skip_link": false,
+        "landmarks": false
+      },
+      "last_worked": null,
+      "consecutive_attempts": 0,
+      "history": [
+        [0, 3, 0, "Baseline: ARIA/keyboard/reduced-motion done, no skip link or landmarks"]
+      ]
+    },
+    "ui_polish": {
+      "current_level": 3,
+      "target_level": 4,
+      "gap": 1,
+      "measurements": {
+        "skeleton_loading": false,
+        "toast_system": false,
+        "micro_interactions": false
+      },
+      "last_worked": null,
+      "consecutive_attempts": 0,
+      "history": [
+        [0, 3, 0, "Baseline: dark/light theme, Framer Motion, glass morphism, typewriter"]
+      ]
+    },
+    "performance": {
+      "current_level": 3,
+      "target_level": 4,
+      "gap": 1,
+      "measurements": {
+        "bundle_size_kb": 442,
+        "initial_load_kb": 292,
+        "lazy_loading": true,
+        "code_splitting": true,
+        "chunks": {
+          "index_js": 36,
+          "motion_js": 122,
+          "vendor_js": 134,
+          "map_js": 150
+        }
+      },
+      "last_worked": null,
+      "consecutive_attempts": 0,
+      "history": [
+        [0, 3, 0, "Baseline: 442KB total (292KB initial + 150KB lazy map), Vite auto-splits"]
+      ]
+    },
+    "data_quality": {
+      "current_level": 3,
+      "target_level": 4,
+      "gap": 1,
+      "measurements": {
+        "stall_count": 2511,
+        "centre_count": 122,
+        "cuisine_keywords": 50
+      },
+      "last_worked": null,
+      "consecutive_attempts": 0,
+      "history": [
+        [0, 3, 0, "Baseline: 2511 stalls, 122 centres, 50+ cuisine keyword mappings"]
+      ]
+    },
+    "error_resilience": {
+      "current_level": 3,
+      "target_level": 4,
+      "gap": 1,
+      "measurements": {
+        "fault_injection_tests": false,
+        "degradation_audit": false,
+        "partial_results": false
+      },
+      "last_worked": null,
+      "consecutive_attempts": 0,
+      "history": [
+        [0, 3, 0, "Baseline: error boundary, SSE timeout, inference fallback, graceful degradation"]
+      ]
+    }
+  },
+  "aggregate_score": 24,
+  "aggregate_target": 40,
+  "convergence_rate": null
+}
