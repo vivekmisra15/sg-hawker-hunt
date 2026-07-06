@@ -519,7 +519,7 @@ class RecommendationAgent:
                 call_type="sentiment",
                 system=_SENTIMENT_SYSTEM,
                 user_content=reviews_summary[:2000],
-                max_tokens=256,
+                max_tokens=512,
             )
             if not raw:
                 logger.debug("Empty Haiku response for sentiment — using neutral")
