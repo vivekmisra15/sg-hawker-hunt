@@ -1,22 +1,26 @@
 {
   "version": 1,
-  "last_updated": "2026-06-20T00:00:00+08:00",
-  "iteration": 0,
+  "last_updated": "2026-07-07T00:06:00+08:00",
+  "iteration": 3,
   "dimensions": {
     "frontend_test_coverage": {
-      "current_level": 1,
+      "current_level": 3,
       "target_level": 4,
-      "gap": 3,
+      "gap": 1,
       "measurements": {
-        "test_count": 0,
-        "coverage_pct": 0,
+        "test_count": 71,
+        "coverage_pct": 42,
         "framework_configured": true,
-        "vitest_installed": true
+        "vitest_installed": true,
+        "test_files": 9,
+        "coverage_configured": true
       },
-      "last_worked": null,
+      "last_worked": 2,
       "consecutive_attempts": 0,
       "history": [
-        [0, 1, 0, "Baseline measurement: Vitest installed but no test files"]
+        [0, 1, 0, "Baseline measurement: Vitest installed but no test files"],
+        [1, 2, 1, "Vitest+RTL configured, 28 tests in 4 files: StatusBadge, FilterStrip, ErrorBoundary, useGeolocation"],
+        [2, 3, 1, "71 tests in 9 files, v8 coverage at 42%, added SearchBar, useSSE, ResultsList, AgentPanel, ThemeContext"]
       ]
     },
     "design_pattern_coverage": {
@@ -48,17 +52,21 @@
       ]
     },
     "api_robustness": {
-      "current_level": 2,
+      "current_level": 3,
       "target_level": 4,
-      "gap": 2,
+      "gap": 1,
       "measurements": {
-        "rate_limit_tests": false,
-        "concurrent_tests": false
+        "rate_limit_tests": true,
+        "concurrent_tests": true,
+        "retry_with_backoff": true,
+        "request_deduplication": true,
+        "robustness_test_count": 12
       },
-      "last_worked": null,
-      "consecutive_attempts": 0,
+      "last_worked": 3,
+      "consecutive_attempts": 1,
       "history": [
-        [0, 2, 0, "Baseline: error handling present, no rate-limit/concurrent tests"]
+        [0, 2, 0, "Baseline: error handling present, no rate-limit/concurrent tests"],
+        [3, 3, 1, "NEA retry with exponential backoff (3 retries), inference dedup, 12 robustness tests"]
       ]
     },
     "backend_test_coverage": {
@@ -66,8 +74,8 @@
       "target_level": 4,
       "gap": 1,
       "measurements": {
-        "test_count": 123,
-        "coverage_pct": 79
+        "test_count": 149,
+        "coverage_pct": 78
       },
       "last_worked": null,
       "consecutive_attempts": 0,
@@ -112,12 +120,12 @@
       "target_level": 4,
       "gap": 1,
       "measurements": {
-        "bundle_size_kb": 442,
-        "initial_load_kb": 292,
+        "bundle_size_kb": 443,
+        "initial_load_kb": 293,
         "lazy_loading": true,
         "code_splitting": true,
         "chunks": {
-          "index_js": 36,
+          "index_js": 37,
           "motion_js": 122,
           "vendor_js": 134,
           "map_js": 150
@@ -160,7 +168,7 @@
       ]
     }
   },
-  "aggregate_score": 25,
+  "aggregate_score": 28,
   "aggregate_target": 40,
-  "convergence_rate": null
+  "convergence_rate": 1.0
 }

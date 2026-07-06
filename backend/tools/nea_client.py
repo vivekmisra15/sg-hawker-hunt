@@ -2,6 +2,7 @@
 NEA (National Environment Agency) API client.
 Fetches hawker centre locations, hygiene grades, and closure dates from data.gov.sg.
 """
+import asyncio
 import httpx
 import json
 import logging
@@ -109,6 +110,9 @@ class NEAClient:
                 return data
         return None
 
+    _MAX_RETRIES = 3
+    _RETRY_BACKOFF_BASE = 1.0  # seconds; doubles each retry: 1, 2, 4
+
     async def _fetch(self, resource_id: str) -> list[dict]:
         cached = self._get_cached(resource_id)
         if cached is not None:
@@ -118,23 +122,54 @@ class NEAClient:
         key = os.getenv("DATAGOV_API_KEY")
         if key:
             headers["X-Api-Key"] = key
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.get(self.BASE_URL, params=params, headers=headers)
-        if resp.status_code == 429:
-            raise NEAClientError("NEA API error: HTTP 429 (rate limited — set DATAGOV_API_KEY in .env)")
-        if resp.status_code != 200:
-            raise NEAClientError(f"NEA API error: HTTP {resp.status_code}")
-        body = resp.json()
-        if not body.get("success"):
-            raise NEAClientError("NEA API returned success=false")
-        records = body["result"]["records"]
-        _cache[resource_id] = (records, time.time())
-        # Evict oldest entries if cache exceeds max size
-        if len(_cache) > _CACHE_MAX_ENTRIES:
-            sorted_keys = sorted(_cache, key=lambda k: _cache[k][1])
-            for old_key in sorted_keys[: len(_cache) - _CACHE_MAX_ENTRIES]:
-                del _cache[old_key]
-        return records
+
+        last_error: Exception | None = None
+        for attempt in range(self._MAX_RETRIES):
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    resp = await client.get(self.BASE_URL, params=params, headers=headers)
+            except httpx.TimeoutException as exc:
+                last_error = exc
+                delay = self._RETRY_BACKOFF_BASE * (2 ** attempt)
+                logger.warning("NEA _fetch timeout (attempt %d/%d), retrying in %.1fs", attempt + 1, self._MAX_RETRIES, delay)
+                await asyncio.sleep(delay)
+                continue
+
+            if resp.status_code == 429:
+                last_error = NEAClientError("NEA API error: HTTP 429 (rate limited)")
+                delay = self._RETRY_BACKOFF_BASE * (2 ** attempt)
+                logger.warning("NEA rate limited (attempt %d/%d), retrying in %.1fs", attempt + 1, self._MAX_RETRIES, delay)
+                await asyncio.sleep(delay)
+                continue
+
+            if resp.status_code >= 500:
+                last_error = NEAClientError(f"NEA API error: HTTP {resp.status_code}")
+                delay = self._RETRY_BACKOFF_BASE * (2 ** attempt)
+                logger.warning("NEA server error %d (attempt %d/%d), retrying in %.1fs", resp.status_code, attempt + 1, self._MAX_RETRIES, delay)
+                await asyncio.sleep(delay)
+                continue
+
+            if resp.status_code != 200:
+                raise NEAClientError(f"NEA API error: HTTP {resp.status_code}")
+
+            body = resp.json()
+            if not body.get("success"):
+                raise NEAClientError("NEA API returned success=false")
+            records = body["result"]["records"]
+            _cache[resource_id] = (records, time.time())
+            # Evict oldest entries if cache exceeds max size
+            if len(_cache) > _CACHE_MAX_ENTRIES:
+                sorted_keys = sorted(_cache, key=lambda k: _cache[k][1])
+                for old_key in sorted_keys[: len(_cache) - _CACHE_MAX_ENTRIES]:
+                    del _cache[old_key]
+            return records
+
+        # All retries exhausted
+        if last_error is not None:
+            if isinstance(last_error, NEAClientError):
+                raise last_error
+            raise NEAClientError(f"NEA API failed after {self._MAX_RETRIES} retries: {last_error}") from last_error
+        raise NEAClientError(f"NEA API failed after {self._MAX_RETRIES} retries")
 
     async def get_centres(self) -> list[CentreInfo]:
         """Return all NEA hawker centres."""
