@@ -80,15 +80,18 @@ class OrchestratorAgent:
                 f"dietary: {dietary or 'none'}, "
                 f"location hint: {location_hint or 'none'}"
             ),
+            data={"source": "LLM (query parsing)"},
         )
 
         # ── Step 2: Resolve coordinates ───────────────────────────────────────
         lat, lng, address = await self._resolve_location(request, location_hint)
 
+        source = "GPS" if request.lat is not None else ("OneMap API" if location_hint else "default")
         yield AgentEvent(
             type="agent_update",
             agent="orchestrator",
             message=f"Location resolved: {address or f'({lat:.4f}, {lng:.4f})'}",
+            data={"source": source},
         )
 
         # ── Step 3: LocationAgent first (need centre names for hygiene) ───────
@@ -102,6 +105,7 @@ class OrchestratorAgent:
             type="agent_update",
             agent="location",
             message=f"Found {len(location_results)} centres within 1.5km",
+            data={"source": "Google Places API + NEA centres"},
         )
 
         centre_names = [r.centre_name for r in location_results]

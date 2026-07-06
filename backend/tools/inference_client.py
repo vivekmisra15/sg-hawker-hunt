@@ -6,6 +6,7 @@ fallback to Anthropic on any failure. Agents must never call LLM SDKs directly.
 """
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -70,7 +71,16 @@ class InferenceClient:
         if self._anthropic is None and self._anthropic_key:
             self._anthropic = anthropic.AsyncAnthropic()
 
+        # Request deduplication: concurrent identical calls share one future
+        self._in_flight: dict[str, asyncio.Future[str]] = {}
+
     # ── Public API ───────────────────────────────────────────────────────
+
+    @staticmethod
+    def _dedup_key(call_type: str, system: str, user_content: str) -> str:
+        """Hash of call parameters for deduplication."""
+        raw = f"{call_type}|{system}|{user_content}"
+        return hashlib.sha256(raw.encode()).hexdigest()[:32]
 
     async def complete(
         self,
@@ -79,7 +89,40 @@ class InferenceClient:
         user_content: str,
         max_tokens: int = 256,
     ) -> str:
-        """Try OpenRouter first, fall back to Anthropic. Returns raw text."""
+        """Try OpenRouter first, fall back to Anthropic. Returns raw text.
+
+        Concurrent identical calls are deduplicated: the first caller executes
+        the request, all others await the same future.
+        """
+        key = self._dedup_key(call_type, system, user_content)
+
+        # If an identical request is already in flight, await its result
+        if key in self._in_flight:
+            return await self._in_flight[key]
+
+        # Create a future so other callers can attach
+        loop = asyncio.get_event_loop()
+        future: asyncio.Future[str] = loop.create_future()
+        self._in_flight[key] = future
+
+        try:
+            result = await self._do_complete(call_type, system, user_content, max_tokens)
+            future.set_result(result)
+            return result
+        except Exception as exc:
+            future.set_exception(exc)
+            raise
+        finally:
+            self._in_flight.pop(key, None)
+
+    async def _do_complete(
+        self,
+        call_type: CallType,
+        system: str,
+        user_content: str,
+        max_tokens: int = 256,
+    ) -> str:
+        """Internal: execute the actual LLM call with provider fallback."""
         models = MODEL_MAP[call_type]
 
         # --- Primary: OpenRouter ---
