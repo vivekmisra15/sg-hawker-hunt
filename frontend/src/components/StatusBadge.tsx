@@ -1,5 +1,5 @@
 interface StatusBadgeProps {
-  type: 'grade' | 'michelin' | 'halal' | 'open' | 'closed' | 'crowd';
+  type: 'grade' | 'michelin' | 'halal' | 'open' | 'closed' | 'crowd' | 'price';
   value?: string;
 }
 
@@ -62,6 +62,32 @@ export function StatusBadge({ type, value }: StatusBadgeProps) {
         {busy ? 'Busy now' : 'Quiet'}
       </span>
     );
+  }
+
+  if (type === 'price') {
+    const category = value ?? '';
+    if (category === 'cheap') {
+      return (
+        <span className={`${base} bg-success-bg text-success border border-success/30`}>
+          $ Under $6
+        </span>
+      );
+    }
+    if (category === 'moderate') {
+      return (
+        <span className={`${base} bg-neutral-bg text-neutral border border-neutral/30`}>
+          $$ Moderate
+        </span>
+      );
+    }
+    if (category === 'expensive') {
+      return (
+        <span className={`${base} bg-warning-bg text-warning border border-warning/30`}>
+          $$$ Pricey
+        </span>
+      );
+    }
+    return null;
   }
 
   return null;

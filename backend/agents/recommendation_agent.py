@@ -62,7 +62,7 @@ _PRICE_SIGNAL_MAP: dict[str, float] = {
 
 # Cuisine keywords that strongly indicate a meal-time slot
 _TIME_CUISINE_MAP: dict[str, set[str]] = {
-    "breakfast": {"kaya toast", "toast", "congee", "porridge", "dim sum", "you tiao",
+    "breakfast": {"kaya toast", "toast", "congee", "dim sum", "you tiao",
                   "teh tarik", "kopi", "nasi lemak", "roti prata", "bak chor mee"},
     "supper": {"bak kut teh", "frog porridge", "bbq stingray", "oyster omelette",
                "wonton soup", "bak chor mee", "satay"},
@@ -181,17 +181,28 @@ def _price_upper_from_level(price_level: Optional[str]) -> Optional[float]:
     return _PRICE_LEVEL_MAP.get(price_level)
 
 
+def _cuisine_word_match(cuisine_combined: str, cuisine_set: set[str]) -> bool:
+    """Check if any cuisine keyword from the set appears as a whole-word match.
+    Uses word-boundary regex to prevent 'kopi' matching inside 'kopitiam' etc.
+    """
+    for c in cuisine_set:
+        # re.escape handles special chars; \b ensures word boundaries
+        if re.search(r"\b" + re.escape(c) + r"\b", cuisine_combined):
+            return True
+    return False
+
+
 def _cuisine_time_score(cuisine_combined: str, time_context: str) -> float:
-    """Score ±0.5 based on whether the stall's cuisine fits the user's time intent."""
+    """Score +-0.5 based on whether the stall's cuisine fits the user's time intent."""
     if time_context == "any":
         return 0.0
     match_cuisines = _TIME_CUISINE_MAP.get(time_context, set())
     # Opposite meal slots (breakfast vs supper are inversely correlated)
     opposite = {"breakfast": "supper", "supper": "breakfast", "lunch": "", "dinner": ""}.get(time_context, "")
     opposite_cuisines = _TIME_CUISINE_MAP.get(opposite, set()) if opposite else set()
-    if any(c in cuisine_combined for c in match_cuisines):
+    if _cuisine_word_match(cuisine_combined, match_cuisines):
         return 0.5
-    if any(c in cuisine_combined for c in opposite_cuisines):
+    if _cuisine_word_match(cuisine_combined, opposite_cuisines):
         return -0.5
     return 0.0
 
@@ -425,6 +436,16 @@ class RecommendationAgent:
                     if 6 < price_upper <= 12:
                         score += 0.5
 
+            # Derive price_category for frontend filtering
+            price_category: str | None = None
+            if price_upper is not None:
+                if price_upper <= 6:
+                    price_category = "cheap"
+                elif price_upper <= 12:
+                    price_category = "moderate"
+                else:
+                    price_category = "expensive"
+
             # ── Reasoning string ──────────────────────────────────────────────
             michelin_note = " Michelin Bib Gourmand 2025." if is_michelin else ""
             halal_note = " Halal certified." if is_halal else ""
@@ -474,6 +495,7 @@ class RecommendationAgent:
                     score=round(score, 3),
                     lat=loc.lat if loc else None,
                     lng=loc.lng if loc else None,
+                    price_category=price_category,
                 )
             )
 

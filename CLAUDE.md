@@ -1387,3 +1387,70 @@ one-off tool for knowledge base expansion, not part of the runtime request path.
 - All existing agent tests updated: `anthropic_client=` → `inference_client=`
 - Mock pattern: `_mock_inference_client(response_json)` returns mock with `complete = AsyncMock`
 
+---
+
+## Session Notes -- RQA Run 04 (2026-07-06)
+
+### Cycle 1 -- Filter Fix, Inference Timeout, Focus Trap
+
+**C1-1: Fix "Under $5" filter end-to-end**
+- Added `price_category` field to `RankedRecommendation` schema ("cheap"/"moderate"/"expensive")
+- Populated from existing three-tier price computation in `recommendation_agent.py`
+- Added to TypeScript types; replaced no-op `return true` with actual filter logic in `applyFilters()`
+- Previously: clicking "Under $5" toggled visually but never filtered results
+
+**C1-2: Add 30-second timeout to inference client**
+- Both OpenRouter and Anthropic calls wrapped in `asyncio.wait_for(timeout=30)`
+- OpenRouter timeout silently falls back to Anthropic; Anthropic timeout raises `InferenceError`
+- Prevents backend worker from blocking indefinitely on a hung LLM provider
+
+**C1-3: Add focus trap to StallDetailPanel**
+- Tab cycles within the dialog; focus moves to close button on open; restored on close
+- Keyboard listener only active when panel is open (WCAG 2.1 SC 2.4.3)
+
+Tests after C1: 128/128 (+5 new)
+
+### Cycle 2 -- Price Badge UI, SSE Test Rewrite, Anthropic Key Guard
+
+**C2-1: Display price badge in ResultCard and StallDetailPanel**
+- Added `price` type to `StatusBadge`: green "$ Under $6", neutral "$$ Moderate", amber "$$$ Pricey"
+- Badge shown in both card and detail panel; `null` for undefined price_category
+
+**C2-2: Rewrite SSE endpoint tests with monkeypatch (carry-forward CF-4)**
+- Replaced fragile `try/finally` with `@pytest.fixture` using `monkeypatch.setattr`
+- Original orchestrator auto-restored regardless of test outcome
+
+**C2-3: Guard Anthropic client creation**
+- `AsyncAnthropic()` only created when `ANTHROPIC_API_KEY` is set (mirrors OpenRouter guard)
+- Fallback path raises clear `InferenceError` with "ANTHROPIC_API_KEY missing" message
+
+Tests after C2: 129/129 (+1 new)
+
+### Cycle 3 -- Filter Label, Cuisine Matching, Concurrent Test
+
+**C3-1: Fix filter label and time banner accessibility**
+- "Under $5" renamed to "Budget" (matches actual $6 threshold)
+- Clock emoji replaced with SVG icon; `role="status"` and `aria-live="polite"` added
+
+**C3-2: Fix _cuisine_time_score word-boundary matching (carry-forward CF-2)**
+- Created `_cuisine_word_match()` with regex `\b...\b` word-boundary matching
+- Removed ambiguous "porridge" from breakfast set (congee covers it; frog porridge is supper)
+
+**C3-3: Concurrent SSE request test**
+- Two sequential requests through full FastAPI pipeline, both verified complete
+- Resets `sse_starlette` global `AppStatus.should_exit_event` between requests
+
+Tests after C3: 137/137 (+8 new)
+
+### Test results -- RQA Run 04
+- 137/137 passing (+14 from pre-RQA-04 baseline of 123)
+- Frontend build: zero TypeScript errors, 443 KB JS bundle
+- Zero regressions across all 3 cycles
+
+### Carry-forward to RQA Run 05
+- `HawkerMap` DivIcon instances not cached by grade+isSelected
+- No true concurrent request test (current is sequential due to TestClient limitations)
+- Sentiment cache key uses full review text hash but only sends first 2000 chars to LLM
+- `_cuisine_time_score` has overlapping entries ("bak chor mee" in both breakfast and supper)
+- `ResultsList` empty state uses emoji instead of SVG icon
+

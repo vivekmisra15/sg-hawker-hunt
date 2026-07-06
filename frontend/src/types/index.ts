@@ -34,6 +34,7 @@ export interface RankedRecommendation {
   score?: number;
   lat?: number;
   lng?: number;
+  price_category?: 'cheap' | 'moderate' | 'expensive' | null;
 }
 
 export interface SearchResult {

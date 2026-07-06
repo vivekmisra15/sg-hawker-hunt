@@ -63,6 +63,7 @@ class RankedRecommendation(BaseModel):
     score: float = 0.0
     lat: Optional[float] = None
     lng: Optional[float] = None
+    price_category: Optional[str] = None  # "cheap" (≤$6) | "moderate" ($6-$12) | "expensive" (>$12)
 
 
 class CentreInfo(BaseModel):

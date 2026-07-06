@@ -101,6 +101,7 @@ export const ResultCard = memo(function ResultCard({ recommendation: r, index, i
         {(r.crowd_level === 'busy' || r.crowd_level === 'quiet') && r.is_open && (
           <StatusBadge type="crowd" value={r.crowd_level} />
         )}
+        {r.price_category && <StatusBadge type="price" value={r.price_category} />}
       </div>
 
       {/* Distance + rating + review count */}
