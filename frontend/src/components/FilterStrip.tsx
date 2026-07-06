@@ -14,7 +14,7 @@ const FILTERS: { key: FilterKey; label: string; icon: string }[] = [
   { key: 'halal', label: 'Halal', icon: '☾' },
   { key: 'open', label: 'Open now', icon: '●' },
   { key: 'gradeA', label: 'Grade A', icon: 'A' },
-  { key: 'cheap', label: 'Under $5', icon: '$' },
+  { key: 'cheap', label: 'Budget', icon: '$' },
 ];
 
 export function FilterStrip({ active, onToggle, resultCount, totalCount }: FilterStripProps) {

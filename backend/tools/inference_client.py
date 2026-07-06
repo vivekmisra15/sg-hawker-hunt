@@ -5,6 +5,7 @@ Routes requests through OpenRouter (free-tier Nemotron models) with automatic
 fallback to Anthropic on any failure. Agents must never call LLM SDKs directly.
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -19,6 +20,7 @@ logger = logging.getLogger(__name__)
 CallType = Literal["orchestrator", "sentiment"]
 
 _OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+_REQUEST_TIMEOUT_SECONDS = 30  # Per-provider timeout — prevents hanging SSE streams
 
 MODEL_MAP: dict[str, dict[str, str]] = {
     "orchestrator": {
@@ -65,7 +67,7 @@ class InferenceClient:
             )
 
         self._anthropic = anthropic_client
-        if self._anthropic is None:
+        if self._anthropic is None and self._anthropic_key:
             self._anthropic = anthropic.AsyncAnthropic()
 
     # ── Public API ───────────────────────────────────────────────────────
@@ -83,13 +85,22 @@ class InferenceClient:
         # --- Primary: OpenRouter ---
         if self._openrouter is not None:
             try:
-                raw = await self._call_openrouter(
-                    model=models["openrouter"],
-                    system=system,
-                    user_content=user_content,
-                    max_tokens=max_tokens,
+                raw = await asyncio.wait_for(
+                    self._call_openrouter(
+                        model=models["openrouter"],
+                        system=system,
+                        user_content=user_content,
+                        max_tokens=max_tokens,
+                    ),
+                    timeout=_REQUEST_TIMEOUT_SECONDS,
                 )
                 return _clean_response(raw)
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "OpenRouter %s timed out after %ds — falling back to Anthropic",
+                    call_type,
+                    _REQUEST_TIMEOUT_SECONDS,
+                )
             except Exception as exc:
                 logger.warning(
                     "OpenRouter %s failed (%s: %s) — falling back to Anthropic",
@@ -99,13 +110,26 @@ class InferenceClient:
                 )
 
         # --- Fallback: Anthropic ---
-        try:
-            return await self._call_anthropic(
-                model=models["anthropic"],
-                system=system,
-                user_content=user_content,
-                max_tokens=max_tokens,
+        if self._anthropic is None:
+            raise InferenceError(
+                f"Both providers failed for {call_type}. "
+                f"Anthropic not configured (ANTHROPIC_API_KEY missing)"
             )
+        try:
+            return await asyncio.wait_for(
+                self._call_anthropic(
+                    model=models["anthropic"],
+                    system=system,
+                    user_content=user_content,
+                    max_tokens=max_tokens,
+                ),
+                timeout=_REQUEST_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError as exc:
+            raise InferenceError(
+                f"Both providers failed for {call_type}. "
+                f"Anthropic timed out after {_REQUEST_TIMEOUT_SECONDS}s"
+            ) from exc
         except Exception as exc:
             raise InferenceError(
                 f"Both providers failed for {call_type}. "

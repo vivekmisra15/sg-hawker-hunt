@@ -29,8 +29,7 @@ function applyFilters(results: RankedRecommendation[], filters: Set<FilterKey>):
     if (filters.has('halal') && !r.is_halal) return false;
     if (filters.has('open') && !r.is_open) return false;
     if (filters.has('gradeA') && r.hygiene_grade !== 'A') return false;
-    // 'cheap' filter: we don't have explicit price in the type, but reasoning may mention it
-    // For now, filter by score > median as a proxy — or skip if no price data
+    if (filters.has('cheap') && r.price_category !== 'cheap') return false;
     return true;
   });
 }
@@ -128,8 +127,13 @@ function App() {
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
               className="mt-4 px-4 py-2.5 bg-accent/10 border border-accent/20 rounded-xl text-sm text-accent flex items-center gap-2"
+              role="status"
+              aria-live="polite"
             >
-              <span className="text-base">🕐</span>
+              <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" strokeWidth={2} />
+                <path strokeLinecap="round" strokeWidth={2} d="M12 6v6l4 2" />
+              </svg>
               {timeContext.label}
             </motion.div>
           )}

@@ -217,3 +217,74 @@ def test_active_provider_openrouter_when_configured():
 def test_active_provider_anthropic_when_no_openrouter():
     ic = InferenceClient(openrouter_client=None, anthropic_client=MagicMock())
     assert ic.active_provider == "anthropic"
+
+
+# ── Timeout tests ───────────────────────────────────────────────────────
+
+
+async def test_openrouter_timeout_falls_back_to_anthropic():
+    """When OpenRouter hangs past the timeout, Anthropic fallback is used."""
+    import asyncio
+
+    async def hang_forever(**kwargs):
+        await asyncio.sleep(999)
+
+    or_client = MagicMock()
+    or_client.chat.completions.create = AsyncMock(side_effect=hang_forever)
+    anth_client = _mock_anthropic('{"fallback": true}')
+
+    ic = InferenceClient(openrouter_client=or_client, anthropic_client=anth_client)
+
+    # Temporarily reduce timeout for test speed
+    import tools.inference_client as ic_mod
+    original_timeout = ic_mod._REQUEST_TIMEOUT_SECONDS
+    ic_mod._REQUEST_TIMEOUT_SECONDS = 0.1
+    try:
+        result = await ic.complete("orchestrator", "system", "query")
+        assert '"fallback"' in result
+        anth_client.messages.create.assert_awaited_once()
+    finally:
+        ic_mod._REQUEST_TIMEOUT_SECONDS = original_timeout
+
+
+async def test_both_providers_timeout_raises_inference_error():
+    """When both providers hang, InferenceError is raised with timeout message."""
+    import asyncio
+
+    async def hang_forever(**kwargs):
+        await asyncio.sleep(999)
+
+    or_client = MagicMock()
+    or_client.chat.completions.create = AsyncMock(side_effect=hang_forever)
+    anth_client = MagicMock()
+    anth_client.messages.create = AsyncMock(side_effect=hang_forever)
+
+    ic = InferenceClient(openrouter_client=or_client, anthropic_client=anth_client)
+
+    import tools.inference_client as ic_mod
+    original_timeout = ic_mod._REQUEST_TIMEOUT_SECONDS
+    ic_mod._REQUEST_TIMEOUT_SECONDS = 0.1
+    try:
+        with pytest.raises(InferenceError, match="timed out"):
+            await ic.complete("orchestrator", "system", "query")
+    finally:
+        ic_mod._REQUEST_TIMEOUT_SECONDS = original_timeout
+
+
+# ── Anthropic key guard tests ───────────────────────────────────────────
+
+
+async def test_no_anthropic_key_raises_clear_error_when_openrouter_fails():
+    """When OpenRouter fails and Anthropic is not configured, error message is clear."""
+    or_client = MagicMock()
+    or_client.chat.completions.create = AsyncMock(
+        side_effect=RuntimeError("OpenRouter down")
+    )
+
+    # Anthropic client is None (not configured)
+    ic = InferenceClient(openrouter_client=or_client, anthropic_client=None)
+    # Force _anthropic to None (bypassing env var init)
+    ic._anthropic = None
+
+    with pytest.raises(InferenceError, match="ANTHROPIC_API_KEY missing"):
+        await ic.complete("orchestrator", "system", "query")

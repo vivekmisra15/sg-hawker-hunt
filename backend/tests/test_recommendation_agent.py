@@ -2,7 +2,7 @@
 import json
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from agents.recommendation_agent import RecommendationAgent, _parse_time_range, _parse_price_upper, _normalise_cuisine
+from agents.recommendation_agent import RecommendationAgent, _parse_time_range, _parse_price_upper, _normalise_cuisine, _cuisine_word_match, _cuisine_time_score
 from models.schemas import LocationResult, HygieneResult, SentimentResult
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -939,3 +939,97 @@ async def test_cuisine_filter_passed_to_vector_store():
     call_kwargs = vs.query.call_args
     assert call_kwargs.kwargs.get("cuisine_filter") == "chicken rice" or \
            (len(call_kwargs.args) > 2 or "cuisine_filter" in call_kwargs.kwargs)
+
+
+# ── price_category field tests ───────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_price_category_cheap_from_seeded_price_range():
+    """Stalls with price_range S$3-5 should get price_category='cheap'."""
+    vs = _make_vs([_rag("Cheap Stall", "Maxwell", price_range="S$3-5", distance=0.3)])
+    agent = _make_agent(vs)
+    with patch("agents.recommendation_agent._load_json_list", return_value=[]):
+        results = await agent.run(
+            query="cheap food",
+            location_results=[_loc("Maxwell")],
+            hygiene_results=[_hyg("Maxwell")],
+            preferences={"budget": "any"},
+        )
+    assert len(results) == 1
+    assert results[0].price_category == "cheap"
+
+
+@pytest.mark.asyncio
+async def test_price_category_moderate_from_places_price_level():
+    """Stalls with Places priceLevel MODERATE should get price_category='moderate'."""
+    vs = _make_vs([_rag("Mod Stall", "Newton", distance=0.3)])
+    agent = _make_agent(vs)
+    with patch("agents.recommendation_agent._load_json_list", return_value=[]):
+        results = await agent.run(
+            query="food",
+            location_results=[_loc("Newton", price_level="PRICE_LEVEL_MODERATE")],
+            hygiene_results=[_hyg("Newton")],
+            preferences={"budget": "any"},
+        )
+    assert len(results) == 1
+    assert results[0].price_category == "moderate"
+
+
+@pytest.mark.asyncio
+async def test_price_category_none_when_no_price_data():
+    """Stalls with no price data should have price_category=None."""
+    vs = _make_vs([_rag("Unknown Stall", "Maxwell", distance=0.3)])
+    agent = _make_agent(vs)
+    with patch("agents.recommendation_agent._load_json_list", return_value=[]):
+        results = await agent.run(
+            query="food",
+            location_results=[_loc("Maxwell")],
+            hygiene_results=[_hyg("Maxwell")],
+            preferences={"budget": "any"},
+        )
+    assert len(results) == 1
+    assert results[0].price_category is None
+
+
+# ── cuisine word-boundary matching tests ─────────────────────────────────────
+
+
+def test_cuisine_word_match_exact_phrase():
+    """Multi-word cuisine like 'chicken rice' matches as a whole phrase."""
+    assert _cuisine_word_match("chicken rice, laksa", {"chicken rice"})
+
+
+def test_cuisine_word_match_rejects_partial():
+    """'kopi' should not match inside 'kopitiam' or 'kopi-o'."""
+    # "kopi" as a set entry should match "kopi" standalone but not "kopitiam"
+    assert _cuisine_word_match("kopi and toast", {"kopi"})
+    assert not _cuisine_word_match("kopitiam stall", {"kopi"})
+
+
+def test_cuisine_word_match_no_false_positive_substring():
+    """Ensure 'bak' in 'bak kut teh' set does not match a stall tagged only 'bak chor mee'."""
+    # The set contains full entries like "bak kut teh", not just "bak"
+    supper_set = {"bak kut teh", "frog porridge"}
+    assert not _cuisine_word_match("bak chor mee", supper_set)
+    assert _cuisine_word_match("bak kut teh specialist", supper_set)
+
+
+def test_cuisine_time_score_breakfast_boost():
+    """A kaya toast stall queried at breakfast should get +0.5."""
+    assert _cuisine_time_score("kaya toast, traditional", "breakfast") == 0.5
+
+
+def test_cuisine_time_score_opposite_penalty():
+    """A supper cuisine queried at breakfast should get -0.5."""
+    assert _cuisine_time_score("bak kut teh specialist", "breakfast") == -0.5
+
+
+def test_cuisine_time_score_frog_porridge_not_breakfast():
+    """'frog porridge' should match supper, not breakfast (porridge removed from breakfast set)."""
+    assert _cuisine_time_score("frog porridge specialist", "breakfast") == -0.5
+
+
+def test_cuisine_time_score_any_returns_zero():
+    """time_context='any' always returns 0 regardless of cuisine."""
+    assert _cuisine_time_score("satay expert", "any") == 0.0
